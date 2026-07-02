@@ -81,7 +81,10 @@ try:
     sio1, sio2 = socketio.Client(), socketio.Client()
     received = []
     sio2.on("receive_chat_message", lambda d: received.append(d))
-    sio1.connect(BASE); sio2.connect(BASE)
+    # Sockets authenticate with the same JWT as the REST API (both parties to the order).
+    tok_ngo = s_ngo.cookies.get("accessToken")
+    tok_rest = s_rest.cookies.get("accessToken")
+    sio1.connect(BASE, auth={"token": tok_ngo}); sio2.connect(BASE, auth={"token": tok_rest})
     sio1.emit("join_chat_room", order_id); sio2.emit("join_chat_room", order_id)
     time.sleep(0.5)
     sio1.emit("send_chat_message", {"message":"Hello, when can we pick up?","sender":"HelpingHands","orderId":order_id})

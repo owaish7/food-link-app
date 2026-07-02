@@ -1,6 +1,6 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_mongoengine import MongoEngine
-from flask_socketio import SocketIO, join_room, emit
+from flask_socketio import SocketIO, join_room, emit, disconnect
 from flask_cors import CORS
 from datetime import datetime
 import json
@@ -67,6 +67,8 @@ from routes.content_filtering import content_filter_bp
 from routes.sentiment_routes import sentiment_bp
 from routes.route_routes import route_bp 
 from models.chat import Chat  # Import the Chat model
+from models.order import Order
+from utils.auth_middleware import verify_token, user_is_order_party
 
 # Register blueprints
 app.register_blueprint(auth_bp)
@@ -80,22 +82,68 @@ app.register_blueprint(sentiment_bp)
 app.register_blueprint(route_bp)
 
 # Socket.IO Events
+#
+# Chat sockets are authenticated with the same JWT used by the REST API. The
+# token arrives either via the httpOnly `accessToken` cookie (browser clients
+# connecting with withCredentials) or an explicit `auth={'token': ...}` payload.
+# We map each connected socket id to its authenticated user so that room joins
+# and messages can be restricted to the parties of an order.
+sid_to_user = {}
+
+
+def _authed_user_for_socket(auth):
+    """Resolve the JWT for this socket from the auth payload or cookie."""
+    token = None
+    if isinstance(auth, dict):
+        token = auth.get('token')
+    if not token:
+        token = request.cookies.get('accessToken')
+    return verify_token(token)
+
+
 @socketio.on('connect')
-def handle_connect():
-    print('A user connected!')
+def handle_connect(auth=None):
+    user_id = _authed_user_for_socket(auth)
+    if not user_id:
+        print('Rejected unauthenticated socket connection')
+        return False  # refuse the connection
+    sid_to_user[request.sid] = user_id
+    print(f'User {user_id} connected!')
+
 
 @socketio.on('join_chat_room')
 def handle_join_chat_room(orderId):
+    user_id = sid_to_user.get(request.sid)
+    try:
+        order = Order.objects.get(id=ObjectId(orderId))
+    except Exception:
+        emit('chat_error', {'message': 'Order not found'})
+        return
+    if not user_is_order_party(user_id, order):
+        emit('chat_error', {'message': 'Forbidden: not a party to this order'})
+        return
     join_room(orderId)
-    print(f'User joined room for order {orderId}')
+    print(f'User {user_id} joined room for order {orderId}')
+
 
 @socketio.on('send_chat_message')
 def handle_send_chat_message(data):
+    user_id = sid_to_user.get(request.sid)
     message = data.get('message')
     order_id = data.get('orderId')
-    sender = data.get('sender')
 
-    # Save message to MongoDB
+    # Verify the sender is authenticated and a party to this order.
+    try:
+        order = Order.objects.get(id=ObjectId(order_id))
+    except Exception:
+        emit('chat_error', {'message': 'Order not found'})
+        return
+    if not user_is_order_party(user_id, order):
+        emit('chat_error', {'message': 'Forbidden: not a party to this order'})
+        return
+
+    # Sender identity comes from the authenticated token, never the client.
+    sender = user_id
     new_message = Chat(message=message, sender=sender, orderId=order_id)
     try:
         new_message.save()
@@ -104,8 +152,10 @@ def handle_send_chat_message(data):
     except Exception as e:
         print(f'Error saving message: {str(e)}')
 
+
 @socketio.on('disconnect')
 def handle_disconnect():
+    sid_to_user.pop(request.sid, None)
     print('A user disconnected!')
 
 # Run the app with SocketIO

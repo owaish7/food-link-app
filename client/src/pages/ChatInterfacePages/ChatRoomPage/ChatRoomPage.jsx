@@ -48,7 +48,9 @@ const ChatRoomPage = () => {
   }, [orderId]);
 
   useEffect(() => {
-    socketRef.current = io(`${API_URL}`);
+    // withCredentials sends the httpOnly accessToken cookie so the server can
+    // authenticate this socket (see app.py handle_connect).
+    socketRef.current = io(`${API_URL}`, { withCredentials: true });
 
     socketRef.current.emit('join_chat_room', orderId);
 

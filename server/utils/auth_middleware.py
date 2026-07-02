@@ -18,6 +18,31 @@ from models.user import User
 JWT_SECRET = os.getenv('JWT_SECRET', 'secretkey')
 
 
+def verify_token(token):
+    """Decode and validate a JWT string, returning its user_id or None.
+
+    Context-free (no Flask request needed) so it can be reused by Socket.IO
+    event handlers as well as HTTP middleware.
+    """
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=['HS256'])
+    except jwt.InvalidTokenError:
+        return None
+    return payload.get('user_id')
+
+
+def user_is_order_party(user_id, order):
+    """True if user_id is the restaurant or NGO referenced by the order."""
+    if user_id is None or order is None:
+        return False
+    return (
+        str(getattr(order.restaurant_id, 'id', order.restaurant_id)) == str(user_id)
+        or str(getattr(order.ngo_id, 'id', order.ngo_id)) == str(user_id)
+    )
+
+
 def _extract_token():
     """Pull the JWT from the accessToken cookie, falling back to a Bearer header."""
     token = request.cookies.get('accessToken')
