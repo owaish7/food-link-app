@@ -31,6 +31,8 @@ htmlcov/
 
 # ---- Runtime caches (osmnx / route graphs) ----
 server/cache/
+# Matplotlib graph images generated at runtime by the graph endpoint
+server/static/graphs/
 
 # ---- OS / editor ----
 .DS_Store

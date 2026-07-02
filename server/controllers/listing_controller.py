@@ -4,10 +4,14 @@ from models.user import User
 from datetime import datetime
 from bson import ObjectId
 import geopy.distance
+from utils.auth_middleware import owns, current_user_id
 
 # Get listings created by a particular restaurant
 def get_restaurant_listings(restaurant_id):
     try:
+        # Ownership: a restaurant may only list its own inventory.
+        if not owns(restaurant_id):
+            return jsonify({"message": "Forbidden: you do not own these listings"}), 403
         now = datetime.utcnow()
         listings = Listing.objects(restaurant_id=ObjectId(restaurant_id), expires_at__gte=now)
         return jsonify([serialize_doc(listing.to_mongo().to_dict()) for listing in listings])
@@ -30,7 +34,6 @@ def get_restaurant_listings(restaurant_id):
 
 def create_listing():
     data = request.json
-    print("Received data:", data)  # Debugging line
     try:
         # Ensure 'expiry' is an integer and valid
         if 'expiry' in data:
@@ -38,13 +41,14 @@ def create_listing():
             if data['expiry'] not in [1, 2, 3, 480]:  # Validate expiry
                 return jsonify({"message": "Invalid expiry value"}), 400
 
-        # Validate restaurant_id and food_type fields
-        if 'restaurantId' not in data or 'food_type' not in data:
-            return jsonify({"message": "restaurantId and food_type are required"}), 400
+        # Validate food_type; the owner is always the authenticated restaurant,
+        # never a client-supplied id.
+        if 'food_type' not in data:
+            return jsonify({"message": "food_type is required"}), 400
 
         # Create and save the new listing
         new_listing = Listing(
-            restaurant_id=ObjectId(data['restaurantId']),
+            restaurant_id=ObjectId(current_user_id()),
             name=data['name'],
             quantity=data['quantity'],
             expiry=data['expiry'],
@@ -75,10 +79,13 @@ def create_listing():
 
 def update_listing(id):
     data = request.json
-    print("Incoming Data:", data)  # Print incoming data
     try:
         # Retrieve the listing to be updated
         updated_listing = Listing.objects.get(id=ObjectId(id))
+
+        # Ownership: only the listing's restaurant may modify it.
+        if not owns(updated_listing.restaurant_id):
+            return jsonify({"message": "Forbidden: you do not own this listing"}), 403
 
         # Update specific fields if they exist in the request data
         if 'name' in data:
@@ -103,6 +110,9 @@ def update_listing(id):
 def delete_listing(id):
     try:
         listing = Listing.objects.get(id=ObjectId(id))
+        # Ownership: only the listing's restaurant may delete it.
+        if not owns(listing.restaurant_id):
+            return jsonify({"message": "Forbidden: you do not own this listing"}), 403
         listing.delete()
         return jsonify({"message": "Listing deleted successfully"})
     except Listing.DoesNotExist:
@@ -129,6 +139,10 @@ def get_nearby_listings():
         # Ensure latitude and longitude are provided and valid
         if latitude is None or longitude is None or ngo_id is None:
             return jsonify({"message": "ngoId, latitude, and longitude are required"}), 400
+
+        # Ownership: an NGO may only browse on its own behalf.
+        if not owns(ngo_id):
+            return jsonify({"message": "Forbidden: ngoId does not match authenticated user"}), 403
 
         # Query the NGO (User)
         ngo = User.objects.get(id=ObjectId(ngo_id))

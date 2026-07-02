@@ -9,13 +9,16 @@ import string
 from models.user import User  
 from models.chat import Chat
 from utils.sentiment_analysis import analyze_sentiment
+from utils.auth_middleware import owns, is_order_party, current_user_id
 
 def create_order():
     data = request.json
     try:
         # Extract fields from request body
         restaurant_id = data.get('restaurantId')
-        ngo_id = data.get('ngoId')
+        # The requesting NGO is always the authenticated user, never a
+        # client-supplied id.
+        ngo_id = current_user_id()
         listings_data = data.get('listings')
 
         listings_details = []
@@ -84,7 +87,10 @@ def get_orders_by_restaurant():
     try:
         # Get restaurant_id from query params
         restaurant_id = request.args.get('restaurant_id')
-        print(f"Restaurant ID: {restaurant_id}")
+
+        # Ownership: a restaurant may only read its own orders.
+        if not owns(restaurant_id):
+            return jsonify({"status": "failure", "error": "Forbidden"}), 403
 
         # Query orders by restaurant_id (convert it to ObjectId)
         orders = Order.objects(restaurant_id=ObjectId(restaurant_id))
@@ -119,7 +125,10 @@ def get_orders_by_ngo():
     try:
         # Get ngo_id from query params
         ngo_id = request.args.get('ngo_id')
-        print(f"NGO ID: {ngo_id}")
+
+        # Ownership: an NGO may only read its own orders.
+        if not owns(ngo_id):
+            return jsonify({"status": "failure", "error": "Forbidden"}), 403
 
         # Query orders by ngo_id (convert it to ObjectId)
         orders = Order.objects(ngo_id=ObjectId(ngo_id))
@@ -155,6 +164,8 @@ def get_orders_by_ngo():
 def get_order_info(order_id):
     try:
         order = Order.objects.get(id=ObjectId(order_id))
+        if not is_order_party(order):
+            return jsonify({"status": "failure", "error": "Forbidden"}), 403
         return jsonify({
             "status": "success",
             "data": serialize_doc(order.to_mongo().to_dict())
@@ -168,6 +179,9 @@ def get_order_info(order_id):
 def decline_order(order_id):
     try:
         order = Order.objects.get(id=ObjectId(order_id))
+        # Only the restaurant that received the request may decline it.
+        if not owns(order.restaurant_id):
+            return jsonify({"status": "failure", "error": "Forbidden"}), 403
         order.update(set__status='declined')
         return jsonify({
             "status": "success",
@@ -207,9 +221,13 @@ def accept_order(order_id):
     try:
         # Fetch the order by ID
         order = Order.objects.get(id=ObjectId(order_id))
-        
+
+        # Only the restaurant that received the request may accept it.
+        if not owns(order.restaurant_id):
+            return jsonify({"status": "failure", "error": "Forbidden"}), 403
+
         # Generate unique codes for NGO and restaurant
-        ngo_code = generate_code(6)  
+        ngo_code = generate_code(6)
         rest_code = generate_code(6)  
 
         # Update the order's status and codes
@@ -273,6 +291,10 @@ def cancel_order(order_id):
         if not order:
             return jsonify({"message": "Order not found"}), 404
 
+        # Only a party to the order may cancel it.
+        if not is_order_party(order):
+            return jsonify({"message": "Forbidden"}), 403
+
         # Determine which code (NGO or Restaurant) to check based on user type
         party_code = None
         if user_type == 'Restaurant':
@@ -320,6 +342,10 @@ def fulfill_order(order_id):
         if not order:
             return jsonify({"message": "Order not found"}), 404
 
+        # Only a party to the order may fulfill it.
+        if not is_order_party(order):
+            return jsonify({"message": "Forbidden"}), 403
+
         # Check if the requesting party matches the order's restaurant or NGO
         party_code = None
         if user_type == 'Restaurant':
@@ -354,6 +380,9 @@ def fulfill_order(order_id):
 def get_messages_by_order_id(order_id):
     """Return the persisted chat history for an order, oldest first."""
     try:
+        order = Order.objects.get(id=ObjectId(order_id))
+        if not is_order_party(order):
+            return jsonify({"message": "Forbidden"}), 403
         messages = Chat.objects(orderId=str(order_id)).order_by('timestamp')
         return jsonify({
             "status": "success",
@@ -391,6 +420,10 @@ def add_rest_review(order_id):
 
         # Fetch the order by order_id
         order = Order.objects.get(id=ObjectId(order_id))
+
+        # Only a party to the order may review it.
+        if not is_order_party(order):
+            return jsonify({"message": "Forbidden"}), 403
 
         # Check if the review for the restaurant already exists
         if order.rest_review:
@@ -430,6 +463,10 @@ def add_ngo_review(order_id):
 
         # Fetch the order by order_id
         order = Order.objects.get(id=ObjectId(order_id))
+
+        # Only a party to the order may review it.
+        if not is_order_party(order):
+            return jsonify({"message": "Forbidden"}), 403
 
         # Check if the review for the NGO already exists
         if order.ngo_review:
