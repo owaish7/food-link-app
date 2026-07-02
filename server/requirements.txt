@@ -24,6 +24,8 @@ scipy
 pandas
 shapely
 requests
-gunicorn
+# gunicorn 24+ removed the built-in eventlet worker; 23.0.0 is the last
+# version that ships gunicorn.workers.geventlet (needed by Flask-SocketIO).
+gunicorn==23.0.0
 mongomock==4.3.0
 websocket-client==1.9.0
