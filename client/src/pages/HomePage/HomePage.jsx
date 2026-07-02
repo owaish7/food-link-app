@@ -7,7 +7,7 @@ export default function Landing() {
 
   const { user } = useAuth();
 
-  const type = (user.userType === 'Restaurant') ? 'restaurant' : 'ngo';
+  const type = (user?.userType === 'Restaurant') ? 'restaurant' : 'ngo';
 
   const { isDarkMode } = useDarkMode();
 

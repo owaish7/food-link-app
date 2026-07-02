@@ -120,7 +120,7 @@ const ChatRoomPage = () => {
     }
   };
 
-  const currentUserType = user.userType;
+  const currentUserType = user?.userType;
   const isOrderAccepted = orderDetails?.status === 'accepted';
 
   return (
@@ -142,7 +142,7 @@ const ChatRoomPage = () => {
           </div>
           <p className="font-semibold">Restaurant: {orderDetails.restaurantId.username}</p>
           <p className="font-semibold">NGO: {orderDetails.ngoId.username}</p>
-          {user.userType === 'restaurant' && orderDetails.status === 'requested' && (
+          {user?.userType === 'restaurant' && orderDetails.status === 'requested' && (
             <div className="flex mt-2">
               <button
                 onClick={handleAccept}
@@ -159,7 +159,7 @@ const ChatRoomPage = () => {
             </div>
           )}
           <div className="flex">
-            <Link to={user.userType === 'Restaurant' ? '/restaurant/transactions' : '/ngo/transactions'}
+            <Link to={user?.userType === 'Restaurant' ? '/restaurant/transactions' : '/ngo/transactions'}
               className="w-1/2 mr-2 mt-2"
             >
               <button className="btn btn-blue px-2 py-3 md:px-4 md:py-2 w-full font-bold rounded-md bg-blue-500 hover:bg-blue-600 text-white hover:text-white transition duration-300 ease-in-out">

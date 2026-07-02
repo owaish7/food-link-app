@@ -17,7 +17,7 @@ export default function Navbar(props) {
 
   const { isDarkMode, toggleDarkMode } = useDarkMode();
 
-  const type = (user.userType === 'Restaurant') ? 'restaurant' : 'ngo';
+  const type = (user?.userType === 'Restaurant') ? 'restaurant' : 'ngo';
 
   // Loading Dark Mode
   useEffect(() => {
