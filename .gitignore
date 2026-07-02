@@ -1,0 +1,40 @@
+# ---- Secrets / environment ----
+# Never commit real env files; keep only the .example templates
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+env/
+ENV/
+.venv/
+.Python
+*.log
+
+# ---- Node / frontend ----
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# ---- Tooling / caches ----
+.pytest_cache/
+.cache/
+.coverage
+htmlcov/
+
+# ---- Runtime caches (osmnx / route graphs) ----
+server/cache/
+
+# ---- OS / editor ----
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp

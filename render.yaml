@@ -1,0 +1,25 @@
+# Render Blueprint — deploys the Food-Link backend.
+# In the Render dashboard: New + -> Blueprint -> connect this repo.
+services:
+  - type: web
+    name: foodlink-api
+    runtime: python
+    rootDir: server
+    buildCommand: pip install -r requirements.txt
+    # eventlet worker + single worker is required for Flask-SocketIO
+    startCommand: gunicorn --worker-class eventlet -w 1 --timeout 120 app:app
+    envVars:
+      - key: MONGO_URI          # paste your MongoDB Atlas connection string
+        sync: false
+      - key: MONGODB_DB_NAME
+        value: foodlink
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CLIENT_ORIGIN      # your Vercel URL, e.g. https://foodlink.vercel.app
+        sync: false
+      - key: CROSS_SITE_COOKIES
+        value: "1"
+      - key: FLASK_DEBUG
+        value: "0"
+      - key: PYTHON_VERSION
+        value: "3.11.9"
