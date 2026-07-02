@@ -4,6 +4,7 @@ services:
   - type: web
     name: foodlink-api
     runtime: python
+    plan: free
     rootDir: server
     buildCommand: pip install -r requirements.txt
     # eventlet worker + single worker is required for Flask-SocketIO
