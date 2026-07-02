@@ -45,16 +45,26 @@ socketio = SocketIO(app, cors_allowed_origins=client_origins)
 # Enable CORS
 CORS(app, resources={r"/*": {"origins": client_origins}}, supports_credentials=True)
 
-# Custom JSON Encoder
-class MongoJSONEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, datetime):
-            return obj.isoformat()  # Convert datetime to ISO 8601 format
-        elif isinstance(obj, ObjectId):
-            return str(obj)  # Convert ObjectId to string
-        return super().default(obj)
+# Custom JSON provider (Flask 2.2+) to serialize datetime and ObjectId.
+# Replaces the deprecated app.json_encoder, whose zero-arg super() call broke
+# under the gunicorn eventlet worker ("super(type, obj): obj must be an
+# instance or subtype of type").
+from flask.json.provider import DefaultJSONProvider
 
-app.json_encoder = MongoJSONEncoder
+class MongoJSONProvider(DefaultJSONProvider):
+    @staticmethod
+    def default(obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()  # ISO 8601
+        if isinstance(obj, ObjectId):
+            return str(obj)
+        return DefaultJSONProvider.default(obj)
+
+app.json = MongoJSONProvider(app)
+# flask-mongoengine installs its own deprecated app.json_encoder during
+# db.init_app(), which Flask's dumps() prioritizes over app.json and which does
+# not serialize raw ObjectId. Clear it so our provider above is actually used.
+app._json_encoder = None
 
 # Import blueprints
 from routes.order_routes import order_bp
