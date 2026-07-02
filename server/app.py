@@ -1,3 +1,10 @@
+# IMPORTANT: eventlet must monkey-patch the standard library BEFORE any module
+# that opens sockets (pymongo/mongoengine, requests) is imported. Under the
+# gunicorn eventlet worker this prevents the "MongoClient opened before fork"
+# breakage that otherwise surfaces as errors on the first DB query.
+import eventlet
+eventlet.monkey_patch()
+
 from flask import Flask, jsonify, request
 from flask_mongoengine import MongoEngine
 from flask_socketio import SocketIO, join_room, emit, disconnect
