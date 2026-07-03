@@ -60,4 +60,22 @@
   /* Hide scrollbar on horizontal rails while keeping scroll */
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+  /* Custom Leaflet teardrop pins (replaces broken default marker images) */
+  .foodlink-pin .fl-pin {
+    width: 34px;
+    height: 34px;
+    border-radius: 50% 50% 50% 0;
+    transform: rotate(-45deg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid #fff;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.35);
+  }
+  .foodlink-pin .fl-pin span {
+    transform: rotate(45deg);
+    font-size: 15px;
+    line-height: 1;
+  }
 }

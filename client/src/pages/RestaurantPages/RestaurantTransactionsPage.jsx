@@ -2,10 +2,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
 import { MapContainer, TileLayer, Polyline, Marker, Popup } from 'react-leaflet';
+import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { FiCheck, FiX, FiMessageCircle, FiList, FiNavigation, FiStar } from 'react-icons/fi';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { useDarkMode } from '../../context/DarkModeContext';
 import { useOrderUpdates } from '../../context/SocketContext';
 import { API_URL } from '../../config';
 import { foodImage } from '../../lib/foodImages';
@@ -26,9 +28,26 @@ import {
   CodeField,
 } from '../../components/orders/OrderBits';
 
+// Custom teardrop pin markers (Leaflet's default PNG markers break under Vite).
+const pinIcon = (emoji, color) =>
+  L.divIcon({
+    className: 'foodlink-pin',
+    html: `<div class="fl-pin" style="background:${color}"><span>${emoji}</span></div>`,
+    iconSize: [34, 34],
+    iconAnchor: [17, 34],
+    popupAnchor: [0, -32],
+  });
+
+const MAP_ICONS = {
+  origin: pinIcon('🍽️', '#059669'),
+  dest: pinIcon('🤝', '#d97706'),
+  meet: pinIcon('📍', '#4f46e5'),
+};
+
 const RestaurantTransactionsPage = () => {
   const { user } = useAuth();
   const toast = useToast();
+  const { isDarkMode } = useDarkMode();
 
   const cacheKey = `rest-orders:${user?._id}`;
   const [orders, setOrders] = useState(() => readCache(cacheKey) || []);
@@ -352,24 +371,49 @@ const RestaurantTransactionsPage = () => {
       {/* Map modal */}
       <Modal open={showMap && !!routeData} onClose={() => setShowMap(false)} title="Route to NGO" size="lg">
         {routeData && (
-          <MapContainer center={routeData.route[0]} zoom={13} style={{ height: '360px', width: '100%', borderRadius: '0.75rem' }}>
-            <TileLayer
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              attribution="&copy; OpenStreetMap contributors"
-            />
-            <Polyline positions={routeData.route} color="#059669" weight={5} />
-            <Marker position={routeData.route[0]}>
-              <Popup>Restaurant (Origin)</Popup>
-            </Marker>
-            <Marker position={routeData.route[routeData.route.length - 1]}>
-              <Popup>NGO (Destination)</Popup>
-            </Marker>
-            {routeData.optimal_meeting_point && (
-              <Marker position={routeData.optimal_meeting_point}>
-                <Popup>Optimal Meeting Point</Popup>
+          <>
+            <MapContainer
+              bounds={routeData.route}
+              boundsOptions={{ padding: [36, 36] }}
+              scrollWheelZoom
+              style={{ height: '380px', width: '100%', borderRadius: '0.9rem' }}
+            >
+              <TileLayer
+                url={
+                  isDarkMode
+                    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+                    : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+                }
+                attribution="&copy; OpenStreetMap &copy; CARTO"
+              />
+              {/* White casing under the route for a crisp modern look */}
+              <Polyline positions={routeData.route} color="#ffffff" weight={8} opacity={0.9} />
+              <Polyline
+                positions={routeData.route}
+                color="#059669"
+                weight={5}
+                opacity={0.95}
+                lineCap="round"
+                lineJoin="round"
+              />
+              <Marker position={routeData.route[0]} icon={MAP_ICONS.origin}>
+                <Popup>Your restaurant</Popup>
               </Marker>
-            )}
-          </MapContainer>
+              <Marker position={routeData.route[routeData.route.length - 1]} icon={MAP_ICONS.dest}>
+                <Popup>NGO destination</Popup>
+              </Marker>
+              {routeData.optimal_meeting_point && (
+                <Marker position={routeData.optimal_meeting_point} icon={MAP_ICONS.meet}>
+                  <Popup>Suggested meeting point</Popup>
+                </Marker>
+              )}
+            </MapContainer>
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-4 text-sm text-stone-600 dark:text-stone-300">
+              <span className="inline-flex items-center gap-1.5">🍽️ Restaurant</span>
+              <span className="inline-flex items-center gap-1.5">📍 Meeting point</span>
+              <span className="inline-flex items-center gap-1.5">🤝 NGO</span>
+            </div>
+          </>
         )}
       </Modal>
 
