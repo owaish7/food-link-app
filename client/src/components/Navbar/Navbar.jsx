@@ -30,7 +30,7 @@ export default function Navbar() {
   };
 
   return (
-    <nav className="sticky top-0 z-50 w-full border-b border-stone-200/70 dark:border-stone-800 bg-white/80 dark:bg-stone-950/80 backdrop-blur-lg">
+    <nav className="sticky top-0 z-50 w-full border-b border-stone-200/70 dark:border-stone-800/80 bg-gradient-to-b from-white to-stone-50/95 dark:from-stone-900 dark:to-stone-950/95 backdrop-blur-lg shadow-[0_6px_24px_-18px_rgba(16,24,40,0.35)]">
       <div className="mx-auto max-w-7xl px-4 sm:px-6">
         <div className="flex h-16 items-center justify-between">
           {/* Brand */}

@@ -6,7 +6,9 @@ export default function Footer() {
   const year = new Date().getFullYear();
 
   return (
-    <footer className="mt-16 border-t border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-950">
+    <footer className="mt-16 bg-gradient-to-b from-stone-100 to-stone-200/70 dark:from-stone-900 dark:to-stone-950">
+      {/* Branded accent line so the footer reads as its own surface */}
+      <div className="h-1 w-full bg-gradient-to-r from-brand-500 via-brand-400 to-accent-400" />
       <div className="mx-auto max-w-7xl px-4 sm:px-6 py-12">
         <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-10">
           <div className="max-w-sm">
