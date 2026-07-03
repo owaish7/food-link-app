@@ -166,9 +166,20 @@ def get_order_info(order_id):
         order = Order.objects.get(id=ObjectId(order_id))
         if not is_order_party(order):
             return jsonify({"status": "failure", "error": "Forbidden"}), 403
+        data = serialize_doc(order.to_mongo().to_dict())
+        # Enrich with human-readable party names for the chat UI (the raw
+        # document only carries restaurant_id / ngo_id as ObjectIds).
+        try:
+            data["restaurant_name"] = order.restaurant_id.username
+        except Exception:
+            data["restaurant_name"] = ""
+        try:
+            data["ngo_name"] = order.ngo_id.username
+        except Exception:
+            data["ngo_name"] = ""
         return jsonify({
             "status": "success",
-            "data": serialize_doc(order.to_mongo().to_dict())
+            "data": data
         })
     except Order.DoesNotExist:
         return jsonify({

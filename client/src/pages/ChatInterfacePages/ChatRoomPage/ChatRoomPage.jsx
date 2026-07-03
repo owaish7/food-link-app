@@ -27,7 +27,7 @@ const ChatRoomPage = () => {
   const fetchOrderDetails = async () => {
     try {
       const response = await axios.get(`${API_URL}/orders/${orderId}`);
-      setOrderDetails(response.data);
+      setOrderDetails(response.data.data);
     } catch (error) {
       console.error('Error fetching order details:', error);
     }
@@ -36,7 +36,7 @@ const ChatRoomPage = () => {
   const fetchPreviousMessages = async () => {
     try {
       const response = await axios.get(`${API_URL}/orders/${orderId}/messages`);
-      setChatMessages(response.data.messages);
+      setChatMessages(response.data.data || []);
     } catch (error) {
       console.error('Error fetching previous messages:', error);
     }
@@ -65,7 +65,7 @@ const ChatRoomPage = () => {
 
   const handleSendMessage = () => {
     if (message.trim() !== '') {
-      socketRef.current.emit('send_chat_message', { message, orderId, sender: user._id });
+      socketRef.current.emit('send_chat_message', { message, orderId, sender: user?._id });
       setMessage('');
     }
   };
@@ -76,7 +76,7 @@ const ChatRoomPage = () => {
 
   const handleAccept = async () => {
     try {
-      await axios.put(`${API_URL}/api/orders/${orderId}/accept`);
+      await axios.put(`${API_URL}/orders/${orderId}/accept`);
       fetchOrderDetails();
     } catch (error) {
       console.error('Error accepting order:', error);
@@ -85,7 +85,7 @@ const ChatRoomPage = () => {
 
   const handleDecline = async () => {
     try {
-      await axios.put(`${API_URL}/api/orders/${orderId}/decline`);
+      await axios.put(`${API_URL}/orders/${orderId}/decline`);
       fetchOrderDetails();
     } catch (error) {
       console.error('Error declining order:', error);
@@ -94,9 +94,9 @@ const ChatRoomPage = () => {
 
   const handleCancel = async () => {
     try {
-      const response = await axios.put(`${API_URL}/api/orders/${orderId}/cancel`, {
+      const response = await axios.put(`${API_URL}/orders/${orderId}/cancel`, {
         code: cancelCode,
-        userType: user.userType
+        user_type: user.userType
       });
       setCancelMessage(response.data.message);
       setShowCancelModal(false);
@@ -108,9 +108,9 @@ const ChatRoomPage = () => {
 
   const handleFulfill = async () => {
     try {
-      const response = await axios.put(`${API_URL}/api/orders/${orderId}/fulfill`, {
+      const response = await axios.put(`${API_URL}/orders/${orderId}/fulfill`, {
         code: fulfillCode,
-        userType: user.userType
+        user_type: user.userType
       });
       setFulfillMessage(response.data.message);
       setShowFulfillModal(false);
@@ -140,9 +140,9 @@ const ChatRoomPage = () => {
               {orderDetails.status}
             </div>
           </div>
-          <p className="font-semibold">Restaurant: {orderDetails.restaurantId.username}</p>
-          <p className="font-semibold">NGO: {orderDetails.ngoId.username}</p>
-          {user?.userType === 'restaurant' && orderDetails.status === 'requested' && (
+          <p className="font-semibold">Restaurant: {orderDetails.restaurant_name}</p>
+          <p className="font-semibold">NGO: {orderDetails.ngo_name}</p>
+          {user?.userType === 'Restaurant' && orderDetails.status === 'requested' && (
             <div className="flex mt-2">
               <button
                 onClick={handleAccept}
@@ -197,13 +197,13 @@ const ChatRoomPage = () => {
                   <input
                     type="text"
                     className={`flex-1 block w-2/3 md:text-md md:w-2/3 md:py-2 lg:w-3/4 lg:py-2 border-gray-300 rounded-md shadow-lg focus:ring-indigo-500 focus:border-indigo-500 ${isDarkMode ? 'bg-gray-600' : ''}`}
-                    value={currentUserType === "Restaurant" ? orderDetails.restCode : orderDetails.ngoCode}
+                    value={currentUserType === "Restaurant" ? orderDetails.rest_code : orderDetails.ngo_code}
                     readOnly
                   />
                   <button
                     className="w-1/3 text-xs font-bold px-2 py-1 ml-1 md:text-sm md:ml-2 md:w-1/3 md:px-4 md:py-2 lg:ml-2 lg:w-1/4 lg:px-4 lg:py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                     onClick={() => {
-                      navigator.clipboard.writeText(orderDetails.restCode);
+                      navigator.clipboard.writeText(currentUserType === "Restaurant" ? orderDetails.rest_code : orderDetails.ngo_code);
                       alert('Code copied to clipboard!');
                     }}
                   >
@@ -291,9 +291,9 @@ const ChatRoomPage = () => {
         {chatMessages.map((message, index) => (
           <div
             key={index}
-            className={`chat-message flex p-3 rounded-lg mb-2 ${((!isDarkMode) && (message.sender === user._id)) && 'bg-blue-500 text-white justify-end'} ${((!isDarkMode) && !(message.sender === user._id)) && 'bg-gray-100 text-black justify-start'} ${isDarkMode && (message.sender === user._id) && 'bg-gray-600 text-gray-200 justify-end'} ${isDarkMode && !(message.sender === user._id) && 'bg-gray-400 text-gray-800'}`}
+            className={`chat-message flex p-3 rounded-lg mb-2 ${((!isDarkMode) && (message.sender === user?._id)) && 'bg-blue-500 text-white justify-end'} ${((!isDarkMode) && !(message.sender === user?._id)) && 'bg-gray-100 text-black justify-start'} ${isDarkMode && (message.sender === user?._id) && 'bg-gray-600 text-gray-200 justify-end'} ${isDarkMode && !(message.sender === user?._id) && 'bg-gray-400 text-gray-800'}`}
           >
-            {message.sender !== user._id && (
+            {message.sender !== user?._id && (
               <span className="message-sender mr-2 font-bold">{message.sender}: </span>
             )}
             <span className="message-content text-sm">{message.message}</span>
