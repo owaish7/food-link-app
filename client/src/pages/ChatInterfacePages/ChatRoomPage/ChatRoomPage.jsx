@@ -98,10 +98,13 @@ const ChatRoomPage = () => {
         code: cancelCode,
         user_type: user.userType
       });
-      setCancelMessage(response.data.message);
       setShowCancelModal(false);
+      setCancelCode('');
       fetchOrderDetails();
+      alert(response.data.message || 'Order cancelled successfully');
     } catch (error) {
+      // Keep the modal open and show the server's reason (e.g. "Invalid code").
+      setCancelMessage(error.response?.data?.message || 'Something went wrong. Please try again.');
       console.error('Error cancelling order:', error);
     }
   };
@@ -112,10 +115,13 @@ const ChatRoomPage = () => {
         code: fulfillCode,
         user_type: user.userType
       });
-      setFulfillMessage(response.data.message);
       setShowFulfillModal(false);
+      setFulfillCode('');
       fetchOrderDetails();
+      alert(response.data.message || 'Order fulfilled successfully');
     } catch (error) {
+      // Keep the modal open and show the server's reason (e.g. "Invalid code").
+      setFulfillMessage(error.response?.data?.message || 'Something went wrong. Please try again.');
       console.error('Error fulfilling order:', error);
     }
   };

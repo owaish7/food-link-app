@@ -57,10 +57,12 @@ const NGOTransactionsPage = () => {
                 code: cancelCode,
                 user_type: user.userType
             });
-            setCancelMessage(response.data.message);
             setShowCancelModal(false);
+            setCancelCode('');
             fetchOrders();
+            alert(response.data.message || 'Order cancelled successfully');
         } catch (error) {
+            setCancelMessage(error.response?.data?.message || 'Something went wrong. Please try again.');
             console.error('Error cancelling order:', error);
         }
     };
@@ -71,10 +73,12 @@ const NGOTransactionsPage = () => {
                 code: fulfillCode,
                 user_type: user.userType
             });
-            setFulfillMessage(response.data.message);
             setShowFulfillModal(false);
+            setFulfillCode('');
             fetchOrders();
+            alert(response.data.message || 'Order fulfilled successfully');
         } catch (error) {
+            setFulfillMessage(error.response?.data?.message || 'Something went wrong. Please try again.');
             console.error('Error fulfilling order:', error);
         }
     };
