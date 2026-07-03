@@ -18,11 +18,8 @@ scikit-learn==1.3.2
 joblib
 matplotlib
 geopy==2.4.1
-osmnx==1.9.4
-networkx
 scipy
 pandas
-shapely
 requests
 # gunicorn 24+ removed the built-in eventlet worker; 23.0.0 is the last
 # version that ships gunicorn.workers.geventlet (needed by Flask-SocketIO).

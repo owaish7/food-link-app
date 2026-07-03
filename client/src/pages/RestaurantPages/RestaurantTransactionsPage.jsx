@@ -251,9 +251,7 @@ const RestaurantTransactionsPage = () => {
       {routing && (
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-stone-900/60 text-white px-6 text-center">
           <Spinner size={40} />
-          <p className="max-w-xs text-sm font-medium">
-            Calculating the route… the first lookup in an area can take up to a minute.
-          </p>
+          <p className="max-w-xs text-sm font-medium">Calculating the route…</p>
         </div>
       )}
 
@@ -408,7 +406,14 @@ const RestaurantTransactionsPage = () => {
                 </Marker>
               )}
             </MapContainer>
-            <div className="mt-4 flex flex-wrap items-center justify-center gap-4 text-sm text-stone-600 dark:text-stone-300">
+            {routeData.distance != null && (
+              <div className="mt-4 flex justify-center">
+                <span className="inline-flex items-center gap-2 rounded-full bg-brand-50 dark:bg-brand-900/30 px-4 py-1.5 text-sm font-semibold text-brand-700 dark:text-brand-300">
+                  {(routeData.distance / 1000).toFixed(1)} km · ~{Math.max(1, Math.round(routeData.duration / 60))} min drive
+                </span>
+              </div>
+            )}
+            <div className="mt-3 flex flex-wrap items-center justify-center gap-4 text-sm text-stone-600 dark:text-stone-300">
               <span className="inline-flex items-center gap-1.5">🍽️ Restaurant</span>
               <span className="inline-flex items-center gap-1.5">📍 Meeting point</span>
               <span className="inline-flex items-center gap-1.5">🤝 NGO</span>

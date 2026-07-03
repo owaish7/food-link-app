@@ -1,17 +1,20 @@
-import osmnx as ox
-import networkx as nx
+# server/controllers/route_controller.py
+#
+# Road routing via the public OSRM API — a single fast HTTP call that returns
+# the driving route geometry, distance and duration. Replaces the previous
+# osmnx approach, which downloaded ~50 MB of OpenStreetMap data and built a
+# NetworkX graph in memory on every cold call (~50s, memory-heavy).
+import requests
 from flask import jsonify, request
 from geopy.distance import geodesic
 
-# In-process cache of downloaded road networks. Coordinates are rounded to a
-# ~1 km grid so nearby origins reuse the same graph instead of re-downloading
-# ~50 MB of OSM data on every request (30-60s). Capped to bound memory usage.
-_GRAPH_CACHE = {}
-_GRAPH_CACHE_MAX = 4
+OSRM_BASE = "https://router.project-osrm.org/route/v1/driving"
 
 
 def _find_optimal_meeting_point(route_coords):
     """Return the waypoint closest to the halfway distance along the route."""
+    if not route_coords:
+        return None
     cumulative = [0]
     for i in range(1, len(route_coords)):
         cumulative.append(cumulative[-1] + geodesic(route_coords[i - 1], route_coords[i]).meters)
@@ -19,39 +22,41 @@ def _find_optimal_meeting_point(route_coords):
     for i, dist in enumerate(cumulative):
         if dist >= half:
             return route_coords[i]
-    return route_coords[-1] if route_coords else None
+    return route_coords[-1]
 
 
 def calculate_route():
-    data = request.get_json()
-    origin = (data.get('origin_latitude'), data.get('origin_longitude'))
-    destination = (data.get('destination_latitude'), data.get('destination_longitude'))
+    data = request.get_json() or {}
+    o_lat, o_lng = data.get('origin_latitude'), data.get('origin_longitude')
+    d_lat, d_lng = data.get('destination_latitude'), data.get('destination_longitude')
 
-    if None in origin or None in destination:
+    if None in (o_lat, o_lng, d_lat, d_lng):
         return jsonify({"error": "Invalid coordinates provided"}), 400
 
-    # Load the road network around the origin, cached per ~1 km grid cell.
-    cache_key = (round(origin[0], 2), round(origin[1], 2))
-    G = _GRAPH_CACHE.get(cache_key)
-    if G is None:
-        try:
-            G = ox.graph_from_point(origin, dist=5000, network_type='drive')
-        except Exception as e:
-            return jsonify({"error": f"Could not load road network: {e}"}), 502
-        if len(_GRAPH_CACHE) >= _GRAPH_CACHE_MAX:
-            _GRAPH_CACHE.pop(next(iter(_GRAPH_CACHE)))  # evict oldest entry
-        _GRAPH_CACHE[cache_key] = G
-
-    # Snap user coordinates to the nearest network nodes.
-    origin_node = ox.distance.nearest_nodes(G, origin[1], origin[0])
-    destination_node = ox.distance.nearest_nodes(G, destination[1], destination[0])
-
+    # OSRM expects lon,lat order in the path.
+    url = f"{OSRM_BASE}/{o_lng},{o_lat};{d_lng},{d_lat}"
     try:
-        route = nx.shortest_path(G, origin_node, destination_node, weight='length')
-        route_coords = [(G.nodes[node]['y'], G.nodes[node]['x']) for node in route]
-        return jsonify({
-            'route': route_coords,
-            'optimal_meeting_point': _find_optimal_meeting_point(route_coords)
-        })
-    except nx.NetworkXNoPath:
+        resp = requests.get(
+            url,
+            params={"overview": "full", "geometries": "geojson"},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        payload = resp.json()
+    except Exception as e:
+        return jsonify({"error": f"Routing service error: {e}"}), 502
+
+    routes = payload.get("routes") or []
+    if not routes:
         return jsonify({"error": "No path found between the locations"}), 404
+
+    best = routes[0]
+    # GeoJSON coordinates are [lon, lat]; Leaflet wants [lat, lon].
+    route_coords = [[lat, lon] for lon, lat in best["geometry"]["coordinates"]]
+
+    return jsonify({
+        "route": route_coords,
+        "optimal_meeting_point": _find_optimal_meeting_point(route_coords),
+        "distance": best.get("distance"),   # metres
+        "duration": best.get("duration"),   # seconds
+    })

@@ -15,8 +15,6 @@ import json
 from bson import ObjectId
 from dotenv import load_dotenv
 import os
-import osmnx as ox
-import networkx as nx
 
 # Load environment variables
 load_dotenv()
@@ -181,12 +179,6 @@ def handle_disconnect():
     print('A user disconnected!')
 
 # Run the app with SocketIO
-try:
-    ox.settings.use_cache = True
-    ox.settings.log_console = False
-except AttributeError:  # older osmnx
-    ox.config(use_cache=True, log_console=False)
-
 if __name__ == '__main__':
     debug_mode = os.getenv('FLASK_DEBUG', '1') == '1'
     socketio.run(app, host='0.0.0.0', port=int(os.getenv('PORT', 8800)), debug=debug_mode)
