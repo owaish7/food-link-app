@@ -190,7 +190,9 @@ const RestaurantTransactionsPage = () => {
         if (!ngoData?.latitude || !ngoData?.longitude) {
           throw new Error('NGO location data is unavailable.');
         }
-        return axios.post('/calculate_route', {
+        // Must be an absolute URL to the API — a relative '/calculate_route'
+        // only works via the Vite dev proxy and 404s on Vercel in production.
+        return axios.post(`${API_URL}/calculate_route`, {
           origin_latitude: user.latitude,
           origin_longitude: user.longitude,
           destination_latitude: ngoData.latitude,
@@ -228,8 +230,11 @@ const RestaurantTransactionsPage = () => {
       />
 
       {routing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 text-white">
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-stone-900/60 text-white px-6 text-center">
           <Spinner size={40} />
+          <p className="max-w-xs text-sm font-medium">
+            Calculating the route… the first lookup in an area can take up to a minute.
+          </p>
         </div>
       )}
 
