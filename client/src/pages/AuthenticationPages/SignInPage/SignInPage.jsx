@@ -1,135 +1,111 @@
 import React, { useState } from 'react';
-import { useAuth } from '../../../context/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
-import registerimage from '../../../assets/registerimage.png';
-import { useDarkMode } from '../../../context/DarkModeContext.jsx';
-import ErrorModal from '../../../Modals/ErrorModal.jsx';
+import { FiEye, FiEyeOff, FiHeart } from 'react-icons/fi';
+import { useAuth } from '../../../context/AuthContext';
+import { useToast } from '../../../context/ToastContext';
+import Button from '../../../components/ui/Button';
+import { Input, Label } from '../../../components/ui/Input';
+import AuthBrandPanel from '../AuthBrandPanel';
 
 const SignInPage = () => {
-
   const { login } = useAuth();
   const navigate = useNavigate();
-  const { isDarkMode } = useDarkMode();
+  const toast = useToast();
 
   const [error, setError] = useState('');
-  const [showModal, setShowModal] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-
-
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-  });
+  const [submitting, setSubmitting] = useState(false);
+  const [formData, setFormData] = useState({ email: '', password: '' });
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData({
-      ...formData,
-      [name]: value,
-    });
+    setFormData({ ...formData, [name]: value });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
+    setSubmitting(true);
     try {
       await login(formData);
-      console.log("Login successful");
+      toast.success('Welcome back!');
       navigate('/');
     } catch (err) {
-      if (err.response && err.response.data && err.response.data.message) {
-        setError(err.response.data.message);
-      } else {
-        setError('An error occurred while logging in.');
-      }
-      setShowModal(true);
+      const msg = err.response?.data?.message || 'An error occurred while logging in.';
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const handleCloseModal = () => {
-    setError('');
-    setShowModal(false);
-  };
-
   return (
-    <div className={`min-h-screen flex items-center px-3 ${isDarkMode ? 'shadow bg-gradient-to-r from-gray-700 to-gray-900' : 'bg-white shadow-xl'}`}>
-      {error && (
-        <ErrorModal
-          errorGrade="Error"
-          errorDescription={error}
-          onClose={handleCloseModal}
+    <div className="min-h-screen flex items-center justify-center bg-stone-50 dark:bg-stone-950 px-4 py-10">
+      <div className="grid w-full max-w-4xl overflow-hidden rounded-3xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 shadow-card lg:grid-cols-2">
+        <AuthBrandPanel
+          title="Welcome back"
+          subtitle="Connect, donate, and make a difference. Sign in to keep surplus food moving to the people who need it."
         />
-      )}
-      <div className="container mx-auto px-2 py-4 sm:px-0">
-        <div className={`flex flex-col sm:flex-row w-full sm:w-10/12 lg:w-8/12 py-12 px-2 md:py-0 md:px-0 ${isDarkMode ? 'bg-white' : 'bg-gray-300'} rounded-xl mx-auto shadow-lg overflow-hidden`}>
-          <div className="w-full hidden lg:w-1/2 lg:flex flex-col items-center justify-center gap-4 p-2 sm:p-12 bg-no-repeat bg-cover bg-center" style={{ backgroundImage: `url(${registerimage})` }}>
-            <h1 className="text-white text-4xl mb-3 font-mono">Welcome back to Food-Link</h1>
-            {/* <div> */}
-            <p className="text-white tracking-wide">Welcome back to FoodLink! Connect, donate, and make a difference. Whether you're a restaurant or an NGO, our platform streamlines your efforts to combat hunger. Together, let's create a world where no one goes hungry.</p>
-            {/* </div> */}
-            <p className='text-white mt-10'>Sign up if you don't have an account</p>
-            <Link to="/sign-up" className='w-1/2 rounded-md bg-purple-500 py-3 hover:bg-blue-700 disabled:cursor-not-allowed text-center text-white transition duration-200 ease-in-out hover:scale-105'>
-              <button
-                // disabled={passwordMatch || !formData.username || !formData.email || !formData.password || !formData.confirmPassword || !formData.verificationCode || !formData.locationName ? true : false}
-                className="">
-                Sign Up
-              </button>
-            </Link>
-          </div>
-          <div className="w-full lg:w-1/2 py-2 sm:py-16 px-2 sm:px-12 font-serif">
-            <h2 className="text-3xl mb-4 font-semibold lg:mt-20 xl:mt-12">Sign-In</h2>
-            {error && <p className="text-red-500">{error}</p>}
-            <form onSubmit={handleSubmit}>
-              <div className="mt-5">
-                <input type="email"
-                  name="email"
-                  placeholder="Email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  className="border border-gray-400 rounded-md py-1 px-2 w-full"
-                  required
-                />
-              </div>
-              <div className="mt-5 input-group relative">
-                <input type={showPassword ? "text" : "password"}
+
+        <div className="p-8 sm:p-10">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 dark:bg-brand-900/30 px-3 py-1 text-xs font-semibold text-brand-700 dark:text-brand-300">
+            <FiHeart size={12} /> FoodLink
+          </span>
+          <h2 className="mt-4 font-display text-2xl font-bold text-stone-900 dark:text-white">Sign in</h2>
+          <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
+            Enter your details to access your account.
+          </p>
+
+          <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+            <div>
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                name="email"
+                placeholder="you@example.com"
+                value={formData.email}
+                onChange={handleChange}
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="password">Password</Label>
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
                   name="password"
-                  placeholder="Password"
-                  className="border border-gray-400 rounded-md py-1 px-2 w-full"
+                  placeholder="••••••••"
                   value={formData.password}
                   onChange={handleChange}
+                  className="pr-10"
                   required
                 />
-                <div className="mt-5 input-group">
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute top-2 right-3 text-gray-500"
-                  >
-                    {showPassword ? (
-                      <svg className="h-5 w-5 text-gray-400 cursor-pointer" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M10 12a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
-                        <path fillRule="evenodd" d="M10 0a9 9 0 00-9 9c0 8 9 11 9 11s9-3 9-11a9 9 0 00-9-9zm0 15a4 4 0 100-8 4 4 0 000 8z" clipRule="evenodd" />
-                      </svg>
-                    ) : (
-                      <svg className="h-5 w-5 text-gray-400 cursor-pointer" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M10 12a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
-                        <path fillRule="evenodd" d="M10 0a9 9 0 00-9 9c0 8 9 11 9 11s9-3 9-11a9 9 0 00-9-9zm0 15a4 4 0 100-8 4 4 0 000 8z" clipRule="evenodd" />
-                      </svg>
-                    )}
-                  </button>
-                </div>
-              </div>
-              <div className="mt-5">
                 <button
-                  type="submit"
-                  className="w-full bg-purple-500 py-3 hover:bg-blue-700 disabled:cursor-not-allowed text-center text-white transition duration-200 ease-in-out hover:scale-105">Sign In</button>
+                  type="button"
+                  onClick={() => setShowPassword((s) => !s)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 dark:hover:text-stone-200"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <FiEyeOff size={18} /> : <FiEye size={18} />}
+                </button>
               </div>
-            </form>
-            <div className="mt-5">
-              <p>
-                Do not have an account? <Link to="/sign-up" className="text-purple-500 transition duration-200 ease-in-out hover:scale-105">Sign Up</Link>
-              </p>
             </div>
-          </div>
+
+            {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+
+            <Button type="submit" size="lg" loading={submitting} className="w-full">
+              Sign in
+            </Button>
+          </form>
+
+          <p className="mt-6 text-sm text-stone-500 dark:text-stone-400">
+            Don&apos;t have an account?{' '}
+            <Link to="/sign-up" className="font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+              Sign up
+            </Link>
+          </p>
         </div>
       </div>
     </div>

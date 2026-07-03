@@ -1,92 +1,93 @@
-/* eslint-disable react/no-unknown-property */
-import React from "react";
+import React from 'react';
+import { Link } from 'react-router-dom';
+import { FiTrendingDown, FiUsers, FiClock, FiArrowRight, FiHeart } from 'react-icons/fi';
+import Button from '../../components/ui/Button';
+import Card from '../../components/ui/Card';
+import { foodImage } from '../../lib/foodImages';
 
+const values = [
+  {
+    icon: <FiTrendingDown />,
+    title: 'Waste less',
+    text: 'Roughly a third of all food produced is wasted. FoodLink redirects edible surplus before it hits the bin.',
+  },
+  {
+    icon: <FiUsers />,
+    title: 'Feed more',
+    text: 'Local NGOs get a reliable, real-time stream of donations from restaurants right in their neighbourhood.',
+  },
+  {
+    icon: <FiClock />,
+    title: 'Act fast',
+    text: 'Listings are expiry-aware and proximity-ranked, so food moves while it’s still fresh.',
+  },
+];
 
-const AboutPage = () => {
+export default function AboutPage() {
   return (
-    <div className="bg-gray p-5 md:p-10 flex gap-10">
-      <div className="flex-1 columns-1 gap-5 lg:gap-8 sm:columns-2 lg:columns-3 xl:columns-4 [&>img:not(:first-child)]:mt-5 lg:[&>img:not(:first-child)]:mt-8 border-[3px] border-t-teal-400 border-l-teal-400 border-r-white border-b-white px-5 py-5">
-        <img src='https://images.unsplash.com/photo-1553787434-45e1d245bfbb?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8Zm9vZCUyMHdhc3RlfGVufDB8fDB8fHww' alt="" />
-        <img src='https://images.unsplash.com/photo-1536703219213-0223580c76b2?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8M3x8Zm9vZCUyMHdhc3RlfGVufDB8fDB8fHww' alt="" />
-        <img src='https://images.unsplash.com/photo-1542624771497-851f77d79349?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8NHx8Zm9vZCUyMHdhc3RlfGVufDB8fDB8fHww' alt="" />
-        <img src='https://images.unsplash.com/photo-1582408904325-adf33a0ec010?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Nnx8Zm9vZCUyMHdhc3RlfGVufDB8fDB8fHww' alt="" />
-        <img src='https://images.unsplash.com/photo-1574676039880-73da8368f0eb?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8OHx8Zm9vZCUyMHdhc3RlfGVufDB8fDB8fHww' alt="" />
-        <img src='https://images.unsplash.com/photo-1591198619986-ac025da6a1f3?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8N3x8Zm9vZCUyMHdhc3RlfGVufDB8fDB8fHww' alt="" />
-        <img src='https://images.unsplash.com/photo-1516711345667-ebafb3ebea12?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTB8fGZvb2QlMjB3YXN0ZXxlbnwwfHwwfHx8MA%3D%3D' alt="" />
-        <img src='https://images.unsplash.com/photo-1591100063300-7b8956e7cb51?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTJ8fGZvb2QlMjB3YXN0ZXxlbnwwfHwwfHx8MA%3D%3D' alt="" />
-        <img src='https://plus.unsplash.com/premium_photo-1681152755702-c3c0445dab97?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTN8fGZvb2QlMjB3YXN0ZXxlbnwwfHwwfHx8MA%3D%3D' alt="" />
-        <img src='https://images.unsplash.com/photo-1562077981-4d7eafd44932?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTh8fGZvb2QlMjB3YXN0ZXxlbnwwfHwwfHx8MA%3D%3D' alt="" />
-        <img src='https://media.istockphoto.com/id/1176948944/photo/different-trash-garbage-sorting-domestic-waste-for-compost-from-fruits-and-vegetables.webp?b=1&s=170667a&w=0&k=20&c=kXCXLe0ntYG4j0Ywyi7isxD7jYGT3vqcM1C271XPTzc=' alt="" />
-        <img src='https://media.istockphoto.com/id/187676687/photo/fresh-food-in-garbage-can-to-illustrate-waste.webp?b=1&s=170667a&w=0&k=20&c=Q4DY77fQ9musrAhfFnp3YmJwzZoIEVTK2U5_IyJAB1Y=' alt="" />
-        <img src='https://images.unsplash.com/photo-1562077981-4d7eafd44932?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTh8fGZvb2QlMjB3YXN0ZXxlbnwwfHwwfHx8MA%3D%3D' alt="" />
-        <img src='https://media.istockphoto.com/id/1160204081/photo/making-compost-from-leftovers.webp?b=1&s=170667a&w=0&k=20&c=0f7PXET8AYw2enR1V1EOULvNwfZp0guGO9X3rquWyxc=' alt="" />
-        <img src='https://media.istockphoto.com/id/1208241405/photo/discarded-and-spoiled-food-on-a-rubbish-heap.webp?b=1&s=170667a&w=0&k=20&c=JF6DXdVDBxQEvEw4BxlAB0L2QOTnTrKIaoSzkuCLbX0=' alt="" />
-        <img src='https://media.istockphoto.com/id/845816364/photo/garbage-pile-in-trash-dump-or-landfill-pollution-concept.webp?b=1&s=170667a&w=0&k=20&c=wqU9FgdPnUkM6ryxquGGOla1Dodr_3uWpwM43qI1uBI=' alt="" />
-        <img src='https://media.istockphoto.com/id/1425232352/photo/expired-organic-bio-waste-mix-vegetables-and-fruits-in-a-huge-container-in-a-rubbish-bin-heap.webp?b=1&s=170667a&w=0&k=20&c=fRuzkcDmauB_tn_icIL_CyGAuS1fjNPMf_M2MB31FMo=' alt="" />
-        <img src='https://media.istockphoto.com/id/136258139/photo/trash.webp?b=1&s=170667a&w=0&k=20&c=iHaHPAHu35ESKw-V0YVk7SZEm7bCqneZhk4yQa1OE4I=' alt="" />
-        <img src='https://media.istockphoto.com/id/660153840/photo/man-throwing-leftovers-to-the-trash-bin.jpg?s=612x612&w=0&k=20&c=1Fnyj2tNzmppYzHRUFR8FTLEuS6k8mwDll9o2e7DjTo=' alt="" />
-        <img src='https://media.istockphoto.com/id/1160204521/photo/making-compost-from-leftovers.jpg?s=612x612&w=0&k=20&c=a-uEvWJgk6uCl9Q63tUaHpT8DfFVJpt4evhjh6A3-2A=' alt="" />
-        <img src='https://media.istockphoto.com/id/1151382168/photo/food-waste-problem-leftovers-thrown-into-into-the-trash-can-spoiled-food-in-refuse-bin.jpg?s=612x612&w=0&k=20&c=WhC30UBE1smU5U6Qj_Mfzmbp3tHItUclOYTy0wyHDNg=' alt="" />
-        
-      </div>
-      <div className="font-alveria flex-1 flex flex-col justify-start text-center items-center gap-6 border-[3px] border-r-teal-400 border-b-teal-400 border-t-white border-l-white px-5 py-5">
-        <h1 className="font-fontTwo text-3xl font-bold text-white bg-teal-200 px-3 pt-2 cursor-pointer">
-          ABOUT US
-        </h1>
-        <div className="text-lg flex flex-col gap-5 leading-10">
-          <p className="text-lg">
-            Food-Link is a web application aimed at reducing food waste by
-            facilitating the donation of excess food from restaurants to charity
-            organizations.
-          </p>
-          <p className="text-lg">
-            <span className="font-extrabold">Restaurant Listings</span>{" "}
-            Restaurants will utilize our platform to list their excess food
-            inventory, providing detailed information such as quantity, types of
-            food items available, and relevant expiration dates. This
-            comprehensive listing ensures transparency and enables NGOs to make
-            informed decisions regarding food donations
-          </p>
-          <p className="text-lg">
-            <span className="font-extrabold">
-              Selection and Request Submission
-            </span>{" "}
-            NGOs browse the platform to explore the available listings from
-            participating restaurants. They can filter search results based on
-            location, food type, and other relevant criteria. Upon identifying
-            suitable food items, NGOs can submit formal requests to restaurants,
-            outlining their specific needs and detailing how the donated food
-            will be utilized to serve vulnerable populations.
-          </p>
-          <p className="text-lg">
-            <span className="font-extrabold">Acceptance Process</span> Stay Upon
-            receiving a donation request, restaurants have the discretion to
-            accept or decline based on factors such as available inventory,
-            logistical feasibility, and alignment with their philanthropic
-            objectives. Upon acceptance, the transaction proceeds to the next
-            stage.
-          </p>
-          <p className="text-lg">
-            <span className="font-extrabold">
-              Chat Interface for Communication
-            </span>{" "}
-            A dedicated chat interface is activated upon acceptance of a
-            donation request, facilitating direct communication between the
-            restaurant and the NGO. This interface serves as a platform for
-            discussing logistical arrangements, including pickup or delivery
-            schedules, packaging requirements, and any other pertinent details
-            to ensure a smooth transaction.
-          </p>
-          <p className="text-lg">
-            <span className="font-extrabold">Modification of Listings</span>{" "}
-            Following the successful completion of a donation transaction, the
-            surplus food donated by the restaurant is promptly removed from the
-            platform's listings. This prevents duplicate requests and ensures
-            efficient utilization of available resources.
-          </p>
+    <main className="bg-stone-50 dark:bg-stone-950">
+      {/* Hero */}
+      <section className="mx-auto max-w-7xl px-4 sm:px-6 py-16 lg:py-20">
+        <div className="grid lg:grid-cols-2 gap-12 items-center">
+          <div>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 dark:bg-brand-900/30 border border-brand-200/60 dark:border-brand-800 px-3 py-1 text-xs font-semibold text-brand-700 dark:text-brand-300">
+              <FiHeart size={12} /> Our mission
+            </span>
+            <h1 className="mt-5 font-display text-4xl sm:text-5xl font-extrabold leading-tight tracking-tight text-stone-900 dark:text-white">
+              A world where no good food goes to waste.
+            </h1>
+            <p className="mt-5 text-lg text-stone-600 dark:text-stone-300">
+              FoodLink is a platform that connects restaurants with surplus food to the NGOs that can
+              distribute it — turning waste into meals, quickly and reliably.
+            </p>
+            <div className="mt-8">
+              <Link to="/">
+                <Button size="lg">
+                  Get started <FiArrowRight />
+                </Button>
+              </Link>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <img src={foodImage('Vegetarian', 'about-1')} alt="Food" className="h-56 w-full object-cover rounded-2xl shadow-card" loading="lazy" />
+            <img src={foodImage('Non-Vegetarian', 'about-2')} alt="Food" className="h-56 w-full object-cover rounded-2xl shadow-card mt-8" loading="lazy" />
+          </div>
         </div>
-      </div>
-    </div>
+      </section>
+
+      {/* Values */}
+      <section className="mx-auto max-w-7xl px-4 sm:px-6 pb-16">
+        <div className="grid md:grid-cols-3 gap-6">
+          {values.map((v) => (
+            <Card key={v.title} className="p-6">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-50 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400 text-2xl">
+                {v.icon}
+              </div>
+              <h3 className="mt-5 text-lg font-semibold text-stone-900 dark:text-white">{v.title}</h3>
+              <p className="mt-2 text-sm text-stone-600 dark:text-stone-400">{v.text}</p>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      {/* Closing band */}
+      <section className="mx-auto max-w-7xl px-4 sm:px-6 pb-20">
+        <div className="rounded-3xl bg-gradient-to-br from-brand-600 to-brand-800 px-8 py-12 text-center shadow-glow">
+          <h2 className="font-display text-2xl sm:text-3xl font-extrabold text-white">
+            Every meal shared is a meal saved.
+          </h2>
+          <p className="mt-3 text-brand-100 max-w-xl mx-auto">
+            Whether you run a restaurant or an NGO, you can be part of the solution.
+          </p>
+          <div className="mt-6 flex justify-center">
+            <Link to="/sign-up">
+              <Button size="lg" variant="accent">
+                Join FoodLink <FiArrowRight />
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </section>
+    </main>
   );
-};
-export default AboutPage;
+}

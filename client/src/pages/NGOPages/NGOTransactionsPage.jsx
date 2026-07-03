@@ -1,340 +1,271 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import { Link } from 'react-router-dom';
+import { FiCheck, FiMessageCircle, FiList, FiStar } from 'react-icons/fi';
 import { useAuth } from '../../context/AuthContext';
-import CardImage from '../../assets/food-link-card-img.jpg';
-import { Link, useNavigate } from 'react-router-dom';
-import { useDarkMode } from '../../context/DarkModeContext';
+import { useToast } from '../../context/ToastContext';
+import { useOrderUpdates } from '../../context/SocketContext';
 import { API_URL } from '../../config';
+import { foodImage } from '../../lib/foodImages';
+import PageHeader from '../../components/ui/PageHeader';
+import Card from '../../components/ui/Card';
+import Button from '../../components/ui/Button';
+import Skeleton from '../../components/ui/Skeleton';
+import EmptyState from '../../components/ui/EmptyState';
+import { StatusBadge } from '../../components/ui/Badge';
+import {
+  CodeModal,
+  ReviewModal,
+  ListingsModal,
+  ReviewBlock,
+  CodeField,
+} from '../../components/orders/OrderBits';
 
 const NGOTransactionsPage = () => {
-    const { user } = useAuth();
-    const [orders, setOrders] = useState([]);
-    const [selectedOrder, setSelectedOrder] = useState(null);
-    const [showCancelModal, setShowCancelModal] = useState(false);
-    const [showModal, setShowModal] = useState(false);
-    const [cancelCode, setCancelCode] = useState('');
-    const [cancelMessage, setCancelMessage] = useState('');
-    const [showFulfillModal, setShowFulfillModal] = useState(false);
-    const [fulfillCode, setFulfillCode] = useState('');
-    const [fulfillMessage, setFulfillMessage] = useState('');
-    const [showReviewModal, setShowReviewModal] = useState(false);
-    const [reviewText, setReviewText] = useState('');
-    const [reviewMessage, setReviewMessage] = useState('');
-    const { isDarkMode } = useDarkMode();
+  const { user } = useAuth();
+  const toast = useToast();
 
-    const imageUrls = [
-        "https://images.pexels.com/photos/262978/pexels-photo-262978.jpeg?auto=compress&cs=tinysrgb&w=600",
-        "https://images.pexels.com/photos/958545/pexels-photo-958545.jpeg?auto=compress&cs=tinysrgb&w=600",
-        "https://images.pexels.com/photos/1537635/pexels-photo-1537635.jpeg?auto=compress&cs=tinysrgb&w=600",
-        "https://images.pexels.com/photos/2696064/pexels-photo-2696064.jpeg?auto=compress&cs=tinysrgb&w=600",
-        "https://images.pexels.com/photos/262918/pexels-photo-262918.jpeg?auto=compress&cs=tinysrgb&w=600",
-        "https://images.pexels.com/photos/1211887/pexels-photo-1211887.jpeg?auto=compress&cs=tinysrgb&w=600",
-        "https://images.pexels.com/photos/693269/pexels-photo-693269.jpeg?auto=compress&cs=tinysrgb&w=600",
-        "https://images.pexels.com/photos/858508/pexels-photo-858508.jpeg?auto=compress&cs=tinysrgb&w=600",
-        "https://images.pexels.com/photos/2074130/pexels-photo-2074130.jpeg?auto=compress&cs=tinysrgb&w=600",
-        "https://images.pexels.com/photos/671956/pexels-photo-671956.jpeg?auto=compress&cs=tinysrgb&w=600",
-    ];
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedOrder, setSelectedOrder] = useState(null);
 
-    const fetchOrders = async () => {
-        try {
-            const response = await axios.get(`${API_URL}/orders/ngo`, {
-                params: { ngo_id: user._id },
-            });
-            setOrders(response.data.data);
-            console.log("response data::", response.data.data)
-        } catch (error) {
-            console.error('Error fetching orders:', error);
-        }
-    };
+  const [showListings, setShowListings] = useState(false);
+  const [showCancel, setShowCancel] = useState(false);
+  const [showFulfill, setShowFulfill] = useState(false);
+  const [showReview, setShowReview] = useState(false);
+  const [cancelCode, setCancelCode] = useState('');
+  const [fulfillCode, setFulfillCode] = useState('');
+  const [reviewText, setReviewText] = useState('');
+  const [cancelError, setCancelError] = useState('');
+  const [fulfillError, setFulfillError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-    useEffect(() => {
-        fetchOrders();
-    }, []);
+  const fetchOrders = useCallback(async () => {
+    if (!user?._id) return;
+    try {
+      const response = await axios.get(`${API_URL}/orders/ngo`, { params: { ngo_id: user._id } });
+      setOrders(response.data.data || []);
+    } catch (error) {
+      console.error('Error fetching orders:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
 
-    const handleCancel = async () => {
-        try {
-            const response = await axios.put(`${API_URL}/orders/${selectedOrder._id}/cancel`, {
-                code: cancelCode,
-                user_type: user.userType
-            });
-            setShowCancelModal(false);
-            setCancelCode('');
-            fetchOrders();
-            alert(response.data.message || 'Order cancelled successfully');
-        } catch (error) {
-            setCancelMessage(error.response?.data?.message || 'Something went wrong. Please try again.');
-            console.error('Error cancelling order:', error);
-        }
-    };
+  useEffect(() => {
+    fetchOrders();
+  }, [fetchOrders]);
 
-    const handleFulfill = async () => {
-        try {
-            const response = await axios.put(`${API_URL}/orders/${selectedOrder._id}/fulfill`, {
-                code: fulfillCode,
-                user_type: user.userType
-            });
-            setShowFulfillModal(false);
-            setFulfillCode('');
-            fetchOrders();
-            alert(response.data.message || 'Order fulfilled successfully');
-        } catch (error) {
-            setFulfillMessage(error.response?.data?.message || 'Something went wrong. Please try again.');
-            console.error('Error fulfilling order:', error);
-        }
-    };
+  useOrderUpdates(fetchOrders);
 
-    const postReview = async () => {
-        try {
-            const response = await axios.post(`${API_URL}/addNgoReview/${selectedOrder._id}`, {
-                review: reviewText
-            });
-            console.log("this is the response data", response.data.message)
-            setReviewMessage(response.data.message);
-            setShowReviewModal(false);
-            console.log("review posted by ngo");
-            fetchOrders();
-        } catch (error) {
-            console.error('Error posting review:', error);
-        }
-    };
+  useEffect(() => {
+    const onFocus = () => fetchOrders();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [fetchOrders]);
 
-    const handleViewListings = (order) => {
-        setSelectedOrder(order);
-        setShowModal(true);
-    };
+  const handleCancel = async () => {
+    setSubmitting(true);
+    setCancelError('');
+    try {
+      const response = await axios.put(`${API_URL}/orders/${selectedOrder._id}/cancel`, {
+        code: cancelCode,
+        user_type: user.userType,
+      });
+      setShowCancel(false);
+      setCancelCode('');
+      await fetchOrders();
+      toast.success(response.data.message || 'Order cancelled.');
+    } catch (error) {
+      setCancelError(error.response?.data?.message || 'Something went wrong. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
-    const canReviewOrder = (order) => {
-        return (order.status === 'cancelled' || order.status === 'fulfilled') && !order.ngo_review;
-    };
+  const handleFulfill = async () => {
+    setSubmitting(true);
+    setFulfillError('');
+    try {
+      const response = await axios.put(`${API_URL}/orders/${selectedOrder._id}/fulfill`, {
+        code: fulfillCode,
+        user_type: user.userType,
+      });
+      setShowFulfill(false);
+      setFulfillCode('');
+      await fetchOrders();
+      toast.success(response.data.message || 'Order fulfilled!');
+    } catch (error) {
+      setFulfillError(error.response?.data?.message || 'Something went wrong. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
-    return (
-        <div className={`container mx-auto p-8 pb-24 ${isDarkMode ? 'bg-gray-800' : 'bg-gray-200'}`}>
-            {orders.map((order, index) => {
-                const canReview = canReviewOrder(order);
-                const reviewAdded = order.rest_review || order.ngo_review;
+  const postReview = async () => {
+    setSubmitting(true);
+    try {
+      const response = await axios.post(`${API_URL}/addNgoReview/${selectedOrder._id}`, {
+        review: reviewText,
+      });
+      setShowReview(false);
+      setReviewText('');
+      await fetchOrders();
+      toast.success(
+        response.data.sentiment ? `Review posted (${response.data.sentiment}).` : 'Review posted.'
+      );
+    } catch (error) {
+      console.error('Error posting review:', error);
+      toast.error('Failed to post review.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
-                return (
-                    <div key={order._id} className={`order-card shadow-lg p-4 mb-4 flex flex-col md:flex-row items-center relative ${isDarkMode ? 'text-gray-300 bg-gray-700' : 'text-gray-600 hover:bg-gray-100 transition duration-300 ease-in-out'}`}>
-                        <div
-                            className={`absolute top-0 right-0 mt-2 mr-2 text-white font-semibold py-1 px-2 capitalize rounded 
-                ${order.status === 'requested' ? 'bg-yellow-500'
-                                    : order.status === 'accepted' ? 'bg-green-500'
-                                        : order.status === 'fulfilled' ? 'bg-blue-500'
-                                            : order.status === 'cancelled' ? 'bg-red-500'
-                                                : order.status === 'dismissed' ? 'bg-brown-500'
-                                                    : 'bg-gray-500'}`}
-                        >
-                            {order.status}
-                        </div>
-                        <img src={imageUrls[index % 10]} alt="Order" className="h-1/2 w-auto mb-4 md:w-1/4 md:h-auto md:mr-4 rounded-md" />
-                        <div className="h-1/2 w-full md:w-3/4 flex flex-col">
-                            <p className="text-md md:text-lg uppercase font-bold">Restaurant: {order.restaurantName}</p>
-                            {order.status === 'accepted' && (
-                                <div className="flex mt-2">
-                                    <button
-                                        onClick={() => {
-                                            setSelectedOrder(order);
-                                            setShowCancelModal(true);
-                                        }}
-                                        className="btn btn-red font-bold text-xs mr-1 w-1/4 px-2 py-1 md:text-lg md:mr-2 md:w-1/4 md:px-4 md:py-2 lg:mr-2 lg:w-1/4 lg:px-4 lg:py-2 rounded-md bg-red-500 hover:bg-red-600 text-white hover:text-white transition duration-300 ease-in-out"
-                                    >
-                                        Cancelled
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            setSelectedOrder(order);
-                                            setShowFulfillModal(true);
-                                        }}
-                                        className="btn btn-green font-bold text-xs mr-1 w-1/4 px-2 py-1 md:text-lg md:mr-2 md:w-1/4 md:px-4 md:py-2 lg:mr-2 lg:w-1/4 lg:px-4 lg:py-2 rounded-md bg-green-500 hover:bg-green-600 text-white hover:text-white transition duration-300 ease-in-out"
-                                    >
-                                        Fulfilled
-                                    </button>
-                                    {/* <Link to={`/chat/${order._id}`}>
-                                        <button
-                                            className="btn btn-blue px-4 py-2 rounded-md bg-blue-500 hover:bg-blue-600 text-white hover:text-white transition duration-300 ease-in-out"
-                                        >
-                                            Chat
-                                        </button>
-                                    </Link> */}
-                                    <div className="w-1/2 md:ml-4">
-                                        <label className={`block text-xs font-medium md:text-sm text-gray-700 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>Unique NGO Code:</label>
-                                        <div className="flex items-center">
-                                            <input
-                                                type="text"
-                                                className={`flex-1 block w-2/3 md:text-md md:w-2/3 md:py-2 lg:w-3/4 lg:py-2 border-gray-300 rounded-md shadow-lg focus:ring-indigo-500 focus:border-indigo-500 ${isDarkMode ? 'bg-gray-600' : ''}`}
-                                                value={order.ngo_code}
-                                                readOnly
-                                            />
-                                            <button
-                                                className="w-1/3 text-xs font-bold px-2 py-1 ml-1 md:text-sm md:ml-2 md:w-1/3 md:px-4 md:py-2 lg:ml-2 lg:w-1/4 lg:px-4 lg:py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                                                onClick={() => {
-                                                    navigator.clipboard.writeText(order.ngoCode);
-                                                    alert('Code copied to clipboard!');
-                                                }}
-                                            >
-                                                Copy
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
+  const copyCode = (code) => {
+    navigator.clipboard.writeText(code || '');
+    toast.success('Code copied to clipboard!');
+  };
 
-                            {order.rest_review && (
-                                <div className={`bg-gray-100 p-2 md:p-4 rounded-md mt-2 ${isDarkMode ? 'bg-gray-600 hover:bg-gray-500 transition duration-300 ease-in-out' : 'hover:bg-gray-200 transition duration-300 ease-in-out'} relative`}>
-                                    {/* Display sentiment label only if reviewSentiment is not an empty string */}
-                                    {order.rest_sentiment && (
-                                        <span className={`absolute top-2 right-2 text-xs font-semibold ${order.rest_sentiment === 'Positive' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'} p-1 rounded-md`}>
-                                            {order.rest_sentiment}
-                                        </span>
-                                    )}
+  const canReview = (order) =>
+    (order.status === 'cancelled' || order.status === 'fulfilled') && !order.ngo_review;
+  const canChat = (order) =>
+    ['accepted', 'fulfilled', 'cancelled', 'dismissed'].includes(order.status);
 
-                                    <p className="text-xs md:text-sm font-semibold hover:bg-gray-200 transition duration-300 ease-in-out">Restaurant Review:</p>
-                                    <p className="text-xs md:text-sm">{order.rest_review}</p>
-                                </div>
-                            )}
+  return (
+    <div className="mx-auto max-w-5xl px-4 sm:px-6 py-8 min-h-[70vh]">
+      <PageHeader
+        title="My Orders"
+        subtitle="Track your requests and coordinate pickups — updates in real time."
+      />
 
-                            {order.ngo_review && (
-                                <div className={`bg-gray-100 p-2 md:p-4 rounded-md mt-2 ${isDarkMode ? 'bg-gray-600 hover:bg-gray-500 transition duration-300 ease-in-out' : 'hover:bg-gray-200 transition duration-300 ease-in-out'} relative`}>
-                                    {/* Display sentiment label only if reviewSentiment is not an empty string */}
-                                    {order.ngo_sentiment && (
-                                        <span className={`absolute top-2 right-2 text-xs font-semibold ${order.ngo_sentiment === 'Positive' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'} p-1 rounded-md`}>
-                                            {order.ngo_sentiment}
-                                        </span>
-                                    )}
-
-                                    <p className="text-xs md:text-sm font-semibold hover:bg-gray-200 transition duration-300 ease-in-out">NGO Review:</p>
-                                    <p className="text-xs md:text-sm">{order.ngo_review}</p>
-                                </div>
-                            )}
-
-                            {canReview && (
-                                <button
-                                    onClick={() => {
-                                        setSelectedOrder(order);
-                                        setShowReviewModal(true);
-                                    }}
-                                    className="btn btn-blue font-bold mt-2 px-2 py-1 md:px-4 md:py-2 rounded-md bg-blue-500 hover:bg-blue-600 text-white hover:text-white transition duration-300 ease-in-out"
-                                >
-                                    Review
-                                </button>
-                            )}
-
-                            {(order.status === 'accepted' || order.status === 'fulfilled' || order.status === 'cancelled' || order.status === 'dismissed') && (
-                                <Link to={`/chat/${order._id}`} className="block w-full mt-2">
-                                    <button
-                                        className="btn btn-blue px-2 py-1 md:px-4 md:py-2 w-full font-bold rounded-md bg-blue-500 hover:bg-blue-600 text-white hover:text-white transition duration-300 ease-in-out"
-                                    >
-                                        Chat
-                                    </button>
-                                </Link>
-                            )}
-
-                            <button
-                                onClick={() => handleViewListings(order)}
-                                className="bg-blue-500 hover:bg-blue-700 text-white font-bold px-2 py-1 md:py-2 md:px-4 rounded mt-2"
-                            >
-                                View Listings Requested
-                            </button>
-                        </div>
-                    </div>
-                )
-            })}
-
-            {/* Modal for viewing listings */}
-            {selectedOrder && showModal && (
-                <div className="fixed inset-0 flex items-center justify-center z-50">
-                    <div className="absolute inset-0 bg-black opacity-50"></div>
-                    <div className="modal bg-white p-8 rounded-lg z-50 relative">
-                        <button onClick={() => setShowModal(false)} className="modal-close absolute top-4 right-4 text-gray-600 hover:text-gray-900">
-                            &#x2715;
-                        </button>
-                        <h2 className="text-xl font-semibold mb-4">Listings for Order ID: {selectedOrder._id}</h2>
-                        <ul>
-                            {selectedOrder.listings.map((listing, index) => (
-                                <li key={index} className="mb-2">
-                                    <span className="font-semibold">Name:</span> {listing.name},
-                                    <span className="ml-2 font-semibold">Quantity:</span> {listing.quantity} kgs,
-                                    <span className="ml-2 font-semibold">Food Type:</span> {listing.food_type},
-                                    <span className="ml-2 font-semibold">Expiry:</span> {listing.expiry} hr
-                                </li>
-                            ))}
-                        </ul>
-                    </div>
-                </div>
-            )}
-
-            {/* Cancel Modal */}
-            {selectedOrder && showCancelModal && (
-                <div className="fixed inset-0 flex items-center justify-center z-50">
-                    <div className="absolute inset-0 bg-black opacity-50"></div>
-                    <div className="modal bg-white p-8 rounded-lg z-50 relative">
-                        <button onClick={() => setShowCancelModal(false)} className="modal-close absolute top-4 right-4 text-gray-600 hover:text-gray-900">
-                            &#x2715;
-                        </button>
-                        <h2 className="text-xl font-semibold mb-4">Enter Code to Cancel Order</h2>
-                        <input
-                            type="text"
-                            className="border p-2 rounded-md w-full mb-4"
-                            placeholder="Enter code"
-                            value={cancelCode}
-                            onChange={(e) => setCancelCode(e.target.value)}
-                        />
-                        <button onClick={handleCancel} className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded">
-                            Cancel Order
-                        </button>
-                        {cancelMessage && <p className="mt-4 text-red-500">{cancelMessage}</p>}
-                    </div>
-                </div>
-            )}
-
-            {/* Fulfill Modal */}
-            {selectedOrder && showFulfillModal && (
-                <div className="fixed inset-0 flex items-center justify-center z-50">
-                    <div className="absolute inset-0 bg-black opacity-50"></div>
-                    <div className="modal bg-white p-8 rounded-lg z-50 relative">
-                        <button onClick={() => setShowFulfillModal(false)} className="modal-close absolute top-4 right-4 text-gray-600 hover:text-gray-900">
-                            &#x2715;
-                        </button>
-                        <h2 className="text-xl font-semibold mb-4">Enter Code to Fulfill Order</h2>
-                        <input
-                            type="text"
-                            className="border p-2 rounded-md w-full mb-4"
-                            placeholder="Enter code"
-                            value={fulfillCode}
-                            onChange={(e) => setFulfillCode(e.target.value)}
-                        />
-                        <button onClick={handleFulfill} className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">
-                            Fulfill Order
-                        </button>
-                        {fulfillMessage && <p className="mt-4 text-green-500">{fulfillMessage}</p>}
-                    </div>
-                </div>
-            )}
-
-            {/* Review Modal */}
-            {selectedOrder && showReviewModal && (
-                <div className="fixed inset-0 flex items-center justify-center z-50">
-                    <div className="absolute inset-0 bg-black opacity-50"></div>
-                    <div className="modal bg-white p-8 rounded-lg z-50 relative">
-                        <button onClick={() => setShowReviewModal(false)} className="modal-close absolute top-4 right-4 text-gray-600 hover:text-gray-900">
-                            &#x2715;
-                        </button>
-                        <h2 className="text-xl font-semibold mb-4">Review for Order ID: {selectedOrder._id}</h2>
-                        <textarea
-                            className="border p-2 rounded-md w-full mb-4"
-                            placeholder="Write your review here"
-                            value={reviewText}
-                            onChange={(e) => setReviewText(e.target.value)}
-                        />
-                        <button onClick={postReview} className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">
-                            Submit Review
-                        </button>
-                        {reviewMessage && <p className="mt-4 text-green-500">{reviewMessage}</p>}
-                    </div>
-                </div>
-            )}
+      {loading ? (
+        <div className="space-y-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Card key={i} className="p-4 flex gap-4">
+              <Skeleton className="h-28 w-28 rounded-xl shrink-0" />
+              <div className="flex-1 space-y-3">
+                <Skeleton className="h-5 w-1/3" />
+                <Skeleton className="h-9 w-full" />
+              </div>
+            </Card>
+          ))}
         </div>
-    );
+      ) : orders.length === 0 ? (
+        <EmptyState
+          icon="🧺"
+          title="No orders yet"
+          description="Browse listings and request a pickup — your orders will appear here."
+          action={
+            <Link to="/ngo/listings">
+              <Button>Browse listings</Button>
+            </Link>
+          }
+        />
+      ) : (
+        <div className="space-y-4">
+          {orders.map((order) => (
+            <Card key={order._id} className="p-4 sm:p-5">
+              <div className="flex flex-col sm:flex-row gap-4">
+                <img
+                  src={foodImage(order.listings?.[0]?.food_type, order._id)}
+                  alt="Order"
+                  className="h-40 sm:h-28 sm:w-28 w-full object-cover rounded-xl shrink-0"
+                  loading="lazy"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs text-stone-400">From</p>
+                      <h3 className="text-lg font-semibold text-stone-900 dark:text-white">
+                        {order.restaurant_name || 'Restaurant'}
+                      </h3>
+                    </div>
+                    <StatusBadge status={order.status} />
+                  </div>
+
+                  {order.status === 'accepted' && (
+                    <div className="mt-3 space-y-3">
+                      <CodeField label="Your pickup code" code={order.ngo_code} onCopy={() => copyCode(order.ngo_code)} />
+                      <div className="flex gap-2">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => { setSelectedOrder(order); setCancelError(''); setShowCancel(true); }}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => { setSelectedOrder(order); setFulfillError(''); setShowFulfill(true); }}
+                        >
+                          <FiCheck size={14} /> Fulfill
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  <ReviewBlock label="Restaurant review" review={order.rest_review} sentiment={order.rest_sentiment} />
+                  <ReviewBlock label="Your review" review={order.ngo_review} sentiment={order.ngo_sentiment} />
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => { setSelectedOrder(order); setShowListings(true); }}>
+                      <FiList size={14} /> Items
+                    </Button>
+                    {canChat(order) && (
+                      <Link to={`/chat/${order._id}`}>
+                        <Button variant="ghost" size="sm">
+                          <FiMessageCircle size={14} /> Chat
+                        </Button>
+                      </Link>
+                    )}
+                    {canReview(order) && (
+                      <Button variant="subtle" size="sm" onClick={() => { setSelectedOrder(order); setReviewText(''); setShowReview(true); }}>
+                        <FiStar size={14} /> Review
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <ListingsModal open={showListings} onClose={() => setShowListings(false)} order={selectedOrder} />
+      <CodeModal
+        open={showCancel}
+        onClose={() => setShowCancel(false)}
+        title="Cancel order"
+        actionLabel="Cancel order"
+        variant="danger"
+        value={cancelCode}
+        onChange={(e) => setCancelCode(e.target.value)}
+        onSubmit={handleCancel}
+        loading={submitting}
+        error={cancelError}
+      />
+      <CodeModal
+        open={showFulfill}
+        onClose={() => setShowFulfill(false)}
+        title="Fulfill order"
+        actionLabel="Fulfill order"
+        value={fulfillCode}
+        onChange={(e) => setFulfillCode(e.target.value)}
+        onSubmit={handleFulfill}
+        loading={submitting}
+        error={fulfillError}
+      />
+      <ReviewModal
+        open={showReview}
+        onClose={() => setShowReview(false)}
+        onSubmit={postReview}
+        loading={submitting}
+        value={reviewText}
+        onChange={(e) => setReviewText(e.target.value)}
+      />
+    </div>
+  );
 };
 
 export default NGOTransactionsPage;

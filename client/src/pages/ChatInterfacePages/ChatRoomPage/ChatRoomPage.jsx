@@ -1,333 +1,291 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
+import { FiArrowLeft, FiList, FiCheck, FiX, FiSend } from 'react-icons/fi';
 import { useAuth } from '../../../context/AuthContext';
-import { Link } from 'react-router-dom';
-import io from 'socket.io-client';
-import { useRef } from 'react';
-import { useDarkMode } from '../../../context/DarkModeContext';
+import { useToast } from '../../../context/ToastContext';
+import { useSocket, useOrderUpdates } from '../../../context/SocketContext';
 import { API_URL } from '../../../config';
+import Button from '../../../components/ui/Button';
+import Spinner from '../../../components/ui/Spinner';
+import { StatusBadge } from '../../../components/ui/Badge';
+import { cn } from '../../../lib/cn';
+import { CodeModal, ListingsModal, CodeField } from '../../../components/orders/OrderBits';
 
 const ChatRoomPage = () => {
   const { user } = useAuth();
   const { orderId } = useParams();
+  const toast = useToast();
+  const { socket } = useSocket();
+
   const [orderDetails, setOrderDetails] = useState(null);
   const [message, setMessage] = useState('');
   const [chatMessages, setChatMessages] = useState([]);
-  const [showModal, setShowModal] = useState(false);
-  const [cancelCode, setCancelCode] = useState('');
-  const [showCancelModal, setShowCancelModal] = useState(false);
-  const [cancelMessage, setCancelMessage] = useState('');
-  const [showFulfillModal, setShowFulfillModal] = useState(false);
-  const [fulfillCode, setFulfillCode] = useState('');
-  const [fulfillMessage, setFulfillMessage] = useState('');
-  const socketRef = useRef(null);
-  const { isDarkMode } = useDarkMode();
+  const [acting, setActing] = useState(false);
 
-  const fetchOrderDetails = async () => {
+  const [showListings, setShowListings] = useState(false);
+  const [showCancel, setShowCancel] = useState(false);
+  const [showFulfill, setShowFulfill] = useState(false);
+  const [cancelCode, setCancelCode] = useState('');
+  const [fulfillCode, setFulfillCode] = useState('');
+  const [cancelError, setCancelError] = useState('');
+  const [fulfillError, setFulfillError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const endRef = useRef(null);
+
+  const fetchOrderDetails = useCallback(async () => {
     try {
       const response = await axios.get(`${API_URL}/orders/${orderId}`);
       setOrderDetails(response.data.data);
     } catch (error) {
       console.error('Error fetching order details:', error);
     }
-  };
+  }, [orderId]);
 
-  const fetchPreviousMessages = async () => {
+  const fetchPreviousMessages = useCallback(async () => {
     try {
       const response = await axios.get(`${API_URL}/orders/${orderId}/messages`);
       setChatMessages(response.data.data || []);
     } catch (error) {
       console.error('Error fetching previous messages:', error);
     }
-  };
+  }, [orderId]);
 
   useEffect(() => {
     fetchOrderDetails();
     fetchPreviousMessages();
-  }, [orderId]);
+  }, [fetchOrderDetails, fetchPreviousMessages]);
+
+  useOrderUpdates(fetchOrderDetails);
+
+  // Chat over the shared, authenticated socket.
+  useEffect(() => {
+    if (!socket) return undefined;
+    socket.emit('join_chat_room', orderId);
+    const onMsg = (m) => setChatMessages((prev) => [...prev, m]);
+    socket.on('receive_chat_message', onMsg);
+    return () => socket.off('receive_chat_message', onMsg);
+  }, [socket, orderId]);
 
   useEffect(() => {
-    // withCredentials sends the httpOnly accessToken cookie so the server can
-    // authenticate this socket (see app.py handle_connect).
-    socketRef.current = io(`${API_URL}`, { withCredentials: true });
+    endRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMessages]);
 
-    socketRef.current.emit('join_chat_room', orderId);
+  const isRestaurant = user?.userType === 'Restaurant';
+  const status = orderDetails?.status;
+  const isAccepted = status === 'accepted';
+  const myCode = isRestaurant ? orderDetails?.rest_code : orderDetails?.ngo_code;
+  const otherName = isRestaurant ? orderDetails?.ngo_name : orderDetails?.restaurant_name;
 
-    socketRef.current.on('receive_chat_message', (message) => {
-      setChatMessages((prevMessages) => [...prevMessages, message]);
-    });
-
-    return () => {
-      socketRef.current.disconnect();
-    };
-  }, [orderId]);
-
-  const handleSendMessage = () => {
-    if (message.trim() !== '') {
-      socketRef.current.emit('send_chat_message', { message, orderId, sender: user?._id });
-      setMessage('');
-    }
+  const handleSend = () => {
+    if (message.trim() === '' || !socket) return;
+    socket.emit('send_chat_message', { message, orderId, sender: user?._id });
+    setMessage('');
   };
 
-  const handleViewListings = () => {
-    setShowModal(true);
-  };
-
-  const handleAccept = async () => {
+  const doAction = async (verb) => {
+    setActing(true);
     try {
-      await axios.put(`${API_URL}/orders/${orderId}/accept`);
-      fetchOrderDetails();
+      await axios.put(`${API_URL}/orders/${orderId}/${verb}`);
+      await fetchOrderDetails();
+      toast.success(verb === 'accept' ? 'Order accepted.' : 'Order declined.');
     } catch (error) {
-      console.error('Error accepting order:', error);
-    }
-  };
-
-  const handleDecline = async () => {
-    try {
-      await axios.put(`${API_URL}/orders/${orderId}/decline`);
-      fetchOrderDetails();
-    } catch (error) {
-      console.error('Error declining order:', error);
+      toast.error(`Failed to ${verb} order.`);
+    } finally {
+      setActing(false);
     }
   };
 
   const handleCancel = async () => {
+    setSubmitting(true);
+    setCancelError('');
     try {
       const response = await axios.put(`${API_URL}/orders/${orderId}/cancel`, {
         code: cancelCode,
-        user_type: user.userType
+        user_type: user.userType,
       });
-      setShowCancelModal(false);
+      setShowCancel(false);
       setCancelCode('');
-      fetchOrderDetails();
-      alert(response.data.message || 'Order cancelled successfully');
+      await fetchOrderDetails();
+      toast.success(response.data.message || 'Order cancelled.');
     } catch (error) {
-      // Keep the modal open and show the server's reason (e.g. "Invalid code").
-      setCancelMessage(error.response?.data?.message || 'Something went wrong. Please try again.');
-      console.error('Error cancelling order:', error);
+      setCancelError(error.response?.data?.message || 'Something went wrong. Please try again.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const handleFulfill = async () => {
+    setSubmitting(true);
+    setFulfillError('');
     try {
       const response = await axios.put(`${API_URL}/orders/${orderId}/fulfill`, {
         code: fulfillCode,
-        user_type: user.userType
+        user_type: user.userType,
       });
-      setShowFulfillModal(false);
+      setShowFulfill(false);
       setFulfillCode('');
-      fetchOrderDetails();
-      alert(response.data.message || 'Order fulfilled successfully');
+      await fetchOrderDetails();
+      toast.success(response.data.message || 'Order fulfilled!');
     } catch (error) {
-      // Keep the modal open and show the server's reason (e.g. "Invalid code").
-      setFulfillMessage(error.response?.data?.message || 'Something went wrong. Please try again.');
-      console.error('Error fulfilling order:', error);
+      setFulfillError(error.response?.data?.message || 'Something went wrong. Please try again.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const currentUserType = user?.userType;
-  const isOrderAccepted = orderDetails?.status === 'accepted';
+  const copyCode = () => {
+    navigator.clipboard.writeText(myCode || '');
+    toast.success('Code copied to clipboard!');
+  };
 
   return (
-    <div className={`container mx-auto p-8 flex flex-col h-screen ${isDarkMode ? 'bg-gray-800' : 'bg-gray-200'}`}>
-      {orderDetails && (
-        <div className={`flex flex-col order-details p-4 rounded-lg shadow-md mb-4 ${isDarkMode ? 'text-gray-300 bg-gray-700' : 'text-gray-600 bg-white hover:bg-gray-100 transition duration-300 ease-in-out'}`}>
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold">Order #{orderId}</h2>
-            <div className={`text-xs md:text-lg font-semibold py-1 px-2 text-white rounded capitalize 
-                ${orderDetails.status === 'requested' ? 'bg-yellow-500'
-                : orderDetails.status === 'accepted' ? 'bg-green-500'
-                  : orderDetails.status === 'fulfilled' ? 'bg-blue-500'
-                    : orderDetails.status === 'cancelled' ? 'bg-red-500'
-                      : orderDetails.status === 'dismissed' ? 'bg-brown-500'
-                        : 'bg-gray-500'}`}
-            >
-              {orderDetails.status}
-            </div>
-          </div>
-          <p className="font-semibold">Restaurant: {orderDetails.restaurant_name}</p>
-          <p className="font-semibold">NGO: {orderDetails.ngo_name}</p>
-          {user?.userType === 'Restaurant' && orderDetails.status === 'requested' && (
-            <div className="flex mt-2">
-              <button
-                onClick={handleAccept}
-                className="btn btn-green mr-2"
-              >
-                Accept
-              </button>
-              <button
-                onClick={handleDecline}
-                className="btn btn-red"
-              >
-                Decline
-              </button>
-            </div>
-          )}
-          <div className="flex">
-            <Link to={user?.userType === 'Restaurant' ? '/restaurant/transactions' : '/ngo/transactions'}
-              className="w-1/2 mr-2 mt-2"
-            >
-              <button className="btn btn-blue px-2 py-3 md:px-4 md:py-2 w-full font-bold rounded-md bg-blue-500 hover:bg-blue-600 text-white hover:text-white transition duration-300 ease-in-out">
-                Back
-              </button>
+    <div className="mx-auto flex max-w-3xl flex-col min-h-[calc(100vh-4rem)] px-4 sm:px-6 py-6">
+      {/* Header */}
+      <div className="rounded-2xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 shadow-card p-4 sm:p-5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <Link to={isRestaurant ? '/restaurant/transactions' : '/ngo/transactions'}>
+              <Button variant="ghost" size="sm" className="!px-2">
+                <FiArrowLeft size={18} />
+              </Button>
             </Link>
-            <button
-              onClick={handleViewListings}
-              className="w-1/2 bg-blue-500 text-xs md:text-sm hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md mt-2"
-            >
-              View Listings Requested
-            </button>
-          </div>
-          {orderDetails.status === 'accepted' && (
-            <div className="flex mt-2">
-              <button
-                onClick={() => {
-                  setShowCancelModal(true);
-                }}
-                className="btn btn-red w-1/4 mr-2 px-4 py-2 text-xs md:text-sm font-bold rounded-md bg-red-500 hover:bg-red-600 text-white hover:text-white transition duration-300 ease-in-out"
-              >
-                Cancelled
-              </button>
-              <button
-                onClick={() => {
-                  setShowFulfillModal(true);
-                }}
-                className="btn btn-green w-1/4 mr-2 px-4 py-2 text-xs md:text-sm font-bold rounded-md bg-green-500 hover:bg-green-600 text-white hover:text-white transition duration-300 ease-in-out"
-              >
-                Fulfilled
-              </button>
-              <div className="w-1/2 ml-4">
-                <label className={`block text-xs font-medium md:text-sm text-gray-700 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>Your Code:</label>
-                <div className="flex items-center">
-                  <input
-                    type="text"
-                    className={`flex-1 block w-2/3 md:text-md md:w-2/3 md:py-2 lg:w-3/4 lg:py-2 border-gray-300 rounded-md shadow-lg focus:ring-indigo-500 focus:border-indigo-500 ${isDarkMode ? 'bg-gray-600' : ''}`}
-                    value={currentUserType === "Restaurant" ? orderDetails.rest_code : orderDetails.ngo_code}
-                    readOnly
-                  />
-                  <button
-                    className="w-1/3 text-xs font-bold px-2 py-1 ml-1 md:text-sm md:ml-2 md:w-1/3 md:px-4 md:py-2 lg:ml-2 lg:w-1/4 lg:px-4 lg:py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                    onClick={() => {
-                      navigator.clipboard.writeText(currentUserType === "Restaurant" ? orderDetails.rest_code : orderDetails.ngo_code);
-                      alert('Code copied to clipboard!');
-                    }}
-                  >
-                    Copy
-                  </button>
-                </div>
-              </div>
+            <div className="min-w-0">
+              <p className="text-xs text-stone-400">Conversation with</p>
+              <h2 className="font-semibold text-stone-900 dark:text-white truncate">
+                {otherName || 'Loading…'}
+              </h2>
             </div>
-          )}
-        </div>
-      )}
-
-      {/* Modal for viewing listings */}
-      {orderDetails && showModal && (
-        <div className="fixed inset-0 flex items-center justify-center z-50">
-          <div className="absolute inset-0 bg-black opacity-50"></div>
-          <div className="modal bg-white p-8 rounded-lg z-50 relative">
-            <button onClick={() => setShowModal(false)} className="modal-close absolute top-4 right-4 text-gray-600 hover:text-gray-900">
-              &#x2715;
-            </button>
-            <h2 className="text-xl font-semibold mb-4">Listings for Order ID: {orderDetails._id}</h2>
-            <ul>
-              {orderDetails.listings.map((listing, index) => (
-                <li key={index} className="mb-2">
-                  <span className="font-semibold">Name:</span> {listing.name},
-                  <span className="ml-2 font-semibold">Quantity:</span> {listing.quantity} kgs,
-                  <span className="ml-2 font-semibold">Expiry:</span> {listing.expiry} hr
-                </li>
-              ))}
-            </ul>
           </div>
+          {status && <StatusBadge status={status} />}
         </div>
-      )}
 
-      {/* Cancel Modal */}
-      {orderDetails && showCancelModal && (
-        <div className="fixed inset-0 flex items-center justify-center z-50">
-          <div className="absolute inset-0 bg-black opacity-50"></div>
-          <div className="modal bg-white p-8 rounded-lg z-50 relative">
-            <button onClick={() => setShowCancelModal(false)} className="modal-close absolute top-4 right-4 text-gray-600 hover:text-gray-900">
-              &#x2715;
-            </button>
-            <h2 className="text-xl font-semibold mb-4">Enter Code to Cancel Order</h2>
-            <input
-              type="text"
-              className="border p-2 rounded-md w-full mb-4"
-              placeholder="Enter code"
-              value={cancelCode}
-              onChange={(e) => setCancelCode(e.target.value)}
-            />
-            <button onClick={handleCancel} className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded">
-              Cancel Order
-            </button>
-            {cancelMessage && <p className="mt-4 text-red-500">{cancelMessage}</p>}
-          </div>
-        </div>
-      )}
+        {orderDetails && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setShowListings(true)}>
+              <FiList size={14} /> Items
+            </Button>
 
-      {/* Fulfill Modal */}
-      {orderDetails && showFulfillModal && (
-        <div className="fixed inset-0 flex items-center justify-center z-50">
-          <div className="absolute inset-0 bg-black opacity-50"></div>
-          <div className="modal bg-white p-8 rounded-lg z-50 relative">
-            <button onClick={() => setShowFulfillModal(false)} className="modal-close absolute top-4 right-4 text-gray-600 hover:text-gray-900">
-              &#x2715;
-            </button>
-            <h2 className="text-xl font-semibold mb-4">Enter Code to Fulfill Order</h2>
-            <input
-              type="text"
-              className="border p-2 rounded-md w-full mb-4"
-              placeholder="Enter code"
-              value={fulfillCode}
-              onChange={(e) => setFulfillCode(e.target.value)}
-            />
-            <button onClick={handleFulfill} className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">
-              Fulfill Order
-            </button>
-            {fulfillMessage && <p className="mt-4 text-green-500">{fulfillMessage}</p>}
-          </div>
-        </div>
-      )}
-
-      {/* Chat Section */}
-      <div className="flex-grow overflow-y-auto px-4 py-2">
-        {chatMessages.map((message, index) => (
-          <div
-            key={index}
-            className={`chat-message flex p-3 rounded-lg mb-2 ${((!isDarkMode) && (message.sender === user?._id)) && 'bg-blue-500 text-white justify-end'} ${((!isDarkMode) && !(message.sender === user?._id)) && 'bg-gray-100 text-black justify-start'} ${isDarkMode && (message.sender === user?._id) && 'bg-gray-600 text-gray-200 justify-end'} ${isDarkMode && !(message.sender === user?._id) && 'bg-gray-400 text-gray-800'}`}
-          >
-            {message.sender !== user?._id && (
-              <span className="message-sender mr-2 font-bold">{message.sender}: </span>
+            {isRestaurant && status === 'requested' && (
+              <>
+                <Button size="sm" loading={acting} onClick={() => doAction('accept')}>
+                  <FiCheck size={14} /> Accept
+                </Button>
+                <Button variant="danger" size="sm" loading={acting} onClick={() => doAction('decline')}>
+                  <FiX size={14} /> Decline
+                </Button>
+              </>
             )}
-            <span className="message-content text-sm">{message.message}</span>
+
+            {isAccepted && (
+              <>
+                <Button variant="secondary" size="sm" onClick={() => { setCancelError(''); setShowCancel(true); }}>
+                  Cancel
+                </Button>
+                <Button size="sm" onClick={() => { setFulfillError(''); setShowFulfill(true); }}>
+                  <FiCheck size={14} /> Fulfill
+                </Button>
+              </>
+            )}
           </div>
-        ))}
+        )}
+
+        {isAccepted && (
+          <div className="mt-3">
+            <CodeField label="Your pickup code" code={myCode} onCopy={copyCode} />
+          </div>
+        )}
       </div>
 
-      {/* Chat Input */}
-      {isOrderAccepted && (
-        <div className={`chat-input-form flex py-2 px-3 border rounded-lg shadow-lg border-gray-200 ${isDarkMode ? 'bg-gray-700 text-gray-200' : ''}`}>
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto py-4 space-y-2.5">
+        {chatMessages.length === 0 ? (
+          <div className="flex h-full items-center justify-center text-center text-sm text-stone-400 dark:text-stone-500">
+            No messages yet — say hello 👋
+          </div>
+        ) : (
+          chatMessages.map((m, i) => {
+            const mine = m.sender === user?._id;
+            return (
+              <div key={i} className={cn('flex', mine ? 'justify-end' : 'justify-start')}>
+                <div
+                  className={cn(
+                    'max-w-[80%] rounded-2xl px-4 py-2.5 text-sm shadow-soft',
+                    mine
+                      ? 'bg-brand-600 text-white rounded-br-md'
+                      : 'bg-white dark:bg-stone-800 text-stone-800 dark:text-stone-100 rounded-bl-md border border-stone-200/70 dark:border-stone-700'
+                  )}
+                >
+                  {!mine && (
+                    <p className="mb-0.5 text-xs font-semibold text-brand-600 dark:text-brand-400">
+                      {otherName || 'Them'}
+                    </p>
+                  )}
+                  {m.message}
+                </div>
+              </div>
+            );
+          })
+        )}
+        <div ref={endRef} />
+      </div>
+
+      {/* Input */}
+      {isAccepted ? (
+        <div className="sticky bottom-0 flex items-center gap-2 rounded-2xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 shadow-card p-2">
           <input
             type="text"
-            placeholder="Enter message..."
+            placeholder="Type a message…"
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            className={`w-full rounded-md p-2 outline-none ${isDarkMode ? 'bg-gray-600' : ''}`}
-            disabled={!isOrderAccepted}
+            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+            className="flex-1 bg-transparent px-3 py-2 text-sm outline-none text-stone-800 dark:text-stone-100 placeholder-stone-400"
           />
-          <button
-            type="button"
-            onClick={handleSendMessage}
-            className={`ml-2 px-4 py-2 text-xs md:text-sm font-bold rounded-md ${isOrderAccepted ? 'bg-blue-500 text-white' : 'bg-gray-300 text-gray-500'}`}
-            disabled={!isOrderAccepted}
-          >
-            Send
-          </button>
+          <Button size="sm" onClick={handleSend} disabled={!message.trim()}>
+            <FiSend size={15} /> Send
+          </Button>
+        </div>
+      ) : (
+        orderDetails && (
+          <div className="rounded-2xl border border-dashed border-stone-300 dark:border-stone-700 p-4 text-center text-sm text-stone-400 dark:text-stone-500">
+            {status === 'requested'
+              ? 'Chat opens once the order is accepted.'
+              : 'This order is no longer active — chat is read-only.'}
+          </div>
+        )
+      )}
+
+      {!orderDetails && (
+        <div className="flex flex-1 items-center justify-center text-brand-600">
+          <Spinner size={32} />
         </div>
       )}
+
+      <ListingsModal open={showListings} onClose={() => setShowListings(false)} order={orderDetails} />
+      <CodeModal
+        open={showCancel}
+        onClose={() => setShowCancel(false)}
+        title="Cancel order"
+        actionLabel="Cancel order"
+        variant="danger"
+        value={cancelCode}
+        onChange={(e) => setCancelCode(e.target.value)}
+        onSubmit={handleCancel}
+        loading={submitting}
+        error={cancelError}
+      />
+      <CodeModal
+        open={showFulfill}
+        onClose={() => setShowFulfill(false)}
+        title="Fulfill order"
+        actionLabel="Fulfill order"
+        value={fulfillCode}
+        onChange={(e) => setFulfillCode(e.target.value)}
+        onSubmit={handleFulfill}
+        loading={submitting}
+        error={fulfillError}
+      />
     </div>
   );
 };

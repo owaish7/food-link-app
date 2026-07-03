@@ -1,511 +1,401 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
-import { useAuth } from '../../context/AuthContext';
-import CardImage from '../../assets/food-link-card-img.jpg';
-import { Link, useNavigate } from 'react-router-dom';
-import { useDarkMode } from '../../context/DarkModeContext';
+import { Link } from 'react-router-dom';
 import { MapContainer, TileLayer, Polyline, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
+import { FiCheck, FiX, FiMessageCircle, FiList, FiNavigation, FiStar } from 'react-icons/fi';
+import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
+import { useOrderUpdates } from '../../context/SocketContext';
 import { API_URL } from '../../config';
+import { foodImage } from '../../lib/foodImages';
+import PageHeader from '../../components/ui/PageHeader';
+import Card from '../../components/ui/Card';
+import Button from '../../components/ui/Button';
+import Spinner from '../../components/ui/Spinner';
+import Skeleton from '../../components/ui/Skeleton';
+import EmptyState from '../../components/ui/EmptyState';
+import Modal from '../../components/ui/Modal';
+import { StatusBadge } from '../../components/ui/Badge';
+import {
+  CodeModal,
+  ReviewModal,
+  ListingsModal,
+  ReviewBlock,
+  CodeField,
+} from '../../components/orders/OrderBits';
 
 const RestaurantTransactionsPage = () => {
   const { user } = useAuth();
+  const toast = useToast();
+
   const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState(null);
-  const [showModal, setShowModal] = useState(false);
+  const [actingId, setActingId] = useState(null);
+
+  const [showListings, setShowListings] = useState(false);
+  const [showCancel, setShowCancel] = useState(false);
+  const [showFulfill, setShowFulfill] = useState(false);
+  const [showReview, setShowReview] = useState(false);
   const [cancelCode, setCancelCode] = useState('');
-  const [showCancelModal, setShowCancelModal] = useState(false);
-  const [cancelMessage, setCancelMessage] = useState('');
   const [fulfillCode, setFulfillCode] = useState('');
-  const [showFulfillModal, setShowFulfillModal] = useState(false);
-  const [fulfillMessage, setFulfillMessage] = useState('');
-  const [showReviewModal, setShowReviewModal] = useState(false);
   const [reviewText, setReviewText] = useState('');
-  const [reviewMessage, setReviewMessage] = useState('');
-  const { isDarkMode } = useDarkMode();
+  const [cancelError, setCancelError] = useState('');
+  const [fulfillError, setFulfillError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
   const [routeData, setRouteData] = useState(null);
   const [showMap, setShowMap] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [routing, setRouting] = useState(false);
   const [cachedRoutes, setCachedRoutes] = useState({});
 
-  const imageUrls = [
-    "https://images.pexels.com/photos/262978/pexels-photo-262978.jpeg?auto=compress&cs=tinysrgb&w=600",
-    "https://images.pexels.com/photos/958545/pexels-photo-958545.jpeg?auto=compress&cs=tinysrgb&w=600",
-    "https://images.pexels.com/photos/1537635/pexels-photo-1537635.jpeg?auto=compress&cs=tinysrgb&w=600",
-    "https://images.pexels.com/photos/2696064/pexels-photo-2696064.jpeg?auto=compress&cs=tinysrgb&w=600",
-    "https://images.pexels.com/photos/262918/pexels-photo-262918.jpeg?auto=compress&cs=tinysrgb&w=600",
-    "https://images.pexels.com/photos/1211887/pexels-photo-1211887.jpeg?auto=compress&cs=tinysrgb&w=600",
-    "https://images.pexels.com/photos/693269/pexels-photo-693269.jpeg?auto=compress&cs=tinysrgb&w=600",
-    "https://images.pexels.com/photos/858508/pexels-photo-858508.jpeg?auto=compress&cs=tinysrgb&w=600",
-    "https://images.pexels.com/photos/2074130/pexels-photo-2074130.jpeg?auto=compress&cs=tinysrgb&w=600",
-    "https://images.pexels.com/photos/671956/pexels-photo-671956.jpeg?auto=compress&cs=tinysrgb&w=600",
-  ];
-
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async () => {
+    if (!user?._id) return;
     try {
       const response = await axios.get(`${API_URL}/orders/restaurant`, {
         params: { restaurant_id: user._id },
       });
-      setOrders(response.data.data);
-      console.log(response)
+      setOrders(response.data.data || []);
     } catch (error) {
       console.error('Error fetching orders:', error);
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [user]);
 
   useEffect(() => {
     fetchOrders();
-  }, [user._id]);
+  }, [fetchOrders]);
+
+  useOrderUpdates(fetchOrders);
+
+  useEffect(() => {
+    const onFocus = () => fetchOrders();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [fetchOrders]);
 
   const handleAccept = async (orderId) => {
+    setActingId(orderId);
     try {
       await axios.put(`${API_URL}/orders/${orderId}/accept`);
-
-      fetchOrders();
+      await fetchOrders();
+      toast.success('Order accepted — a pickup code was generated.');
     } catch (error) {
       console.error('Error accepting order:', error);
+      toast.error('Failed to accept order.');
+    } finally {
+      setActingId(null);
     }
   };
 
   const handleDecline = async (orderId) => {
+    setActingId(orderId);
     try {
       await axios.put(`${API_URL}/orders/${orderId}/decline`);
-      fetchOrders();
+      await fetchOrders();
+      toast.info('Order declined.');
     } catch (error) {
       console.error('Error declining order:', error);
+      toast.error('Failed to decline order.');
+    } finally {
+      setActingId(null);
     }
   };
 
   const handleCancel = async () => {
+    setSubmitting(true);
+    setCancelError('');
     try {
       const response = await axios.put(`${API_URL}/orders/${selectedOrder._id}/cancel`, {
         code: cancelCode,
-        user_type: user.userType
+        user_type: user.userType,
       });
-      setShowCancelModal(false);
+      setShowCancel(false);
       setCancelCode('');
-      fetchOrders();
-      alert(response.data.message || 'Order cancelled successfully');
+      await fetchOrders();
+      toast.success(response.data.message || 'Order cancelled.');
     } catch (error) {
-      setCancelMessage(error.response?.data?.message || 'Something went wrong. Please try again.');
-      console.error('Error cancelling order:', error);
+      setCancelError(error.response?.data?.message || 'Something went wrong. Please try again.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const handleFulfill = async () => {
+    setSubmitting(true);
+    setFulfillError('');
     try {
       const response = await axios.put(`${API_URL}/orders/${selectedOrder._id}/fulfill`, {
         code: fulfillCode,
-        user_type: user.userType
+        user_type: user.userType,
       });
-      setShowFulfillModal(false);
+      setShowFulfill(false);
       setFulfillCode('');
-      fetchOrders();
-      alert(response.data.message || 'Order fulfilled successfully');
+      await fetchOrders();
+      toast.success(response.data.message || 'Order fulfilled!');
     } catch (error) {
-      setFulfillMessage(error.response?.data?.message || 'Something went wrong. Please try again.');
-      console.error('Error fulfilling order:', error);
+      setFulfillError(error.response?.data?.message || 'Something went wrong. Please try again.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const postReview = async () => {
+    setSubmitting(true);
     try {
       const response = await axios.post(`${API_URL}/addRestReview/${selectedOrder._id}`, {
-        review: reviewText
+        review: reviewText,
       });
-      setReviewMessage(response.data.message);
-      setShowReviewModal(false);
-      console.log("review posted by restaurant");
-      fetchOrders();
+      setShowReview(false);
+      setReviewText('');
+      await fetchOrders();
+      toast.success(
+        response.data.sentiment
+          ? `Review posted (${response.data.sentiment}).`
+          : 'Review posted.'
+      );
     } catch (error) {
       console.error('Error posting review:', error);
+      toast.error('Failed to post review.');
+    } finally {
+      setSubmitting(false);
     }
-  };
-  const handleDirectionsClick = (ngoId) => {
-    // Check if user data contains latitude and longitude
-    if (user && user.latitude && user.longitude) {
-      const latitude = user.latitude;
-      const longitude = user.longitude;
-  
-      // Log the latitude and longitude of the user
-      console.log('User Latitude:', latitude);
-      console.log('User Longitude:', longitude);
-  
-      // Get the NGO data from the clicked order
-    //  const ngoId = orders[0]?.ngo_id;  // Assuming 'order' is the clicked card
-  
-      if (ngoId) {
-        if (cachedRoutes[ngoId]) {
-          setRouteData(cachedRoutes[ngoId]);
-          setShowMap(true);
-        }
-          else{
-  
-          
-        setLoading(true);
-        // Make the API request to the backend using Axios
-        axios.get(`${API_URL}/ngo/profile/${ngoId}`)
-          .then((response) => {
-            // Assuming the response contains the NGO's location data in the format { latitude, longitude }
-            const ngoData = response.data;
-  
-            if (ngoData && ngoData.latitude && ngoData.longitude) {
-              const ngoLatitude = ngoData.latitude;
-              const ngoLongitude = ngoData.longitude;
-  
-              // Log the NGO's latitude and longitude
-              console.log('NGO Latitude:', ngoLatitude);
-              console.log('NGO Longitude:', ngoLongitude);
-  
-              // Make the API request to calculate the route
-              axios.post('/calculate_route', {
-                origin_latitude: latitude,  // Restaurant's latitude
-                origin_longitude: longitude, // Restaurant's longitude
-                destination_latitude: ngoLatitude, // NGO's latitude
-                destination_longitude: ngoLongitude // NGO's longitude
-              })
-                .then((routeResponse) => {
-                  // Log the response from the route calculation API
-                  console.log("Route Response:", routeResponse.data);
-                  setRouteData(routeResponse.data); 
-                  setCachedRoutes(prev => ({ ...prev, [ngoId]: routeData }));
-                  setShowMap(true); 
-                  setLoading(false);
-                  const routeData = routeResponse.data;
-                  
-                  if (routeData) {
-                    // Log the route and the optimal meeting point
-                    console.log('Route Coordinates:', routeData.route);
-                    console.log('Optimal Meeting Point:', routeData.optimal_meeting_point);
-  
-                    // Optionally, display the route and meeting point in an alert or UI
-                    // alert(`Route calculated!\nMeeting point: ${JSON.stringify(routeData.optimal_meeting_point)}`);
-                  } else {
-                    alert('Error calculating route.');
-                    setLoading(false); 
-                  }
-                })
-                .catch((error) => {
-                  console.error('Error calculating route:', error);
-                  alert('Error calculating route.');
-                  setLoading(false); 
-                });
-  
-            } else {
-              alert('NGO location data is unavailable.');
-              setLoading(false); 
-            }
-          })
-          .catch((error) => {
-            console.error('Error fetching NGO data:', error);
-            alert('Error fetching NGO data.');
-            setLoading(false); 
-          });
-        }
-      } else {
-        alert('NGO ID is missing.');
-      }
-    } else {
-      alert('User location information is unavailable.');
-    }
-  };
-  
-  const handleCloseMap = () => {
-    setShowMap(false);
-  };
-  
-    
-  const handleViewListings = (order) => {
-    setSelectedOrder(order);
-    setShowModal(true);
   };
 
-  const canReviewOrder = (order) => {
-    return (order.status === 'cancelled' || order.status === 'fulfilled') && !order.rest_review;
+  const handleDirections = (ngoId) => {
+    if (!user?.latitude || !user?.longitude) {
+      toast.error('Your location is unavailable.');
+      return;
+    }
+    if (!ngoId) {
+      toast.error('NGO location is missing.');
+      return;
+    }
+    if (cachedRoutes[ngoId]) {
+      setRouteData(cachedRoutes[ngoId]);
+      setShowMap(true);
+      return;
+    }
+    setRouting(true);
+    axios
+      .get(`${API_URL}/ngo/profile/${ngoId}`)
+      .then((response) => {
+        const ngoData = response.data;
+        if (!ngoData?.latitude || !ngoData?.longitude) {
+          throw new Error('NGO location data is unavailable.');
+        }
+        return axios.post('/calculate_route', {
+          origin_latitude: user.latitude,
+          origin_longitude: user.longitude,
+          destination_latitude: ngoData.latitude,
+          destination_longitude: ngoData.longitude,
+        });
+      })
+      .then((routeResponse) => {
+        const data = routeResponse.data;
+        setRouteData(data);
+        setCachedRoutes((prev) => ({ ...prev, [ngoId]: data }));
+        setShowMap(true);
+      })
+      .catch((error) => {
+        console.error('Error calculating route:', error);
+        toast.error(error.message || 'Could not calculate the route.');
+      })
+      .finally(() => setRouting(false));
   };
+
+  const copyCode = (code) => {
+    navigator.clipboard.writeText(code || '');
+    toast.success('Code copied to clipboard!');
+  };
+
+  const canReview = (order) =>
+    (order.status === 'cancelled' || order.status === 'fulfilled') && !order.rest_review;
+  const canChat = (order) =>
+    ['accepted', 'fulfilled', 'cancelled', 'dismissed'].includes(order.status);
 
   return (
-    <div className={`container mx-auto p-8 pb-24 ${isDarkMode ? 'bg-gray-800' : 'bg-gray-200'}`}>
-   
-    {loading && (
-      <div className="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-50">
-        <div className="loader">Loading...</div>
-      </div>
-    )}
-    {showMap && routeData && (
-      <div className="relative mt-4">
-        <button
-          onClick={() => setShowMap(false)}
-          className="absolute top-2 right-2 z-20 bg-red-500 text-white p-2 rounded"
-        >
-          &#x2715;
-        </button>
-        <div className="relative z-10">
-          <MapContainer center={routeData.route[0]} zoom={13} style={{ height: '300px', width: '100%' }}>
+    <div className="mx-auto max-w-5xl px-4 sm:px-6 py-8 min-h-[70vh]">
+      <PageHeader
+        title="Transactions"
+        subtitle="Incoming requests and pickups from NGOs — updates in real time."
+      />
+
+      {routing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 text-white">
+          <Spinner size={40} />
+        </div>
+      )}
+
+      {loading ? (
+        <div className="space-y-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Card key={i} className="p-4 flex gap-4">
+              <Skeleton className="h-28 w-28 rounded-xl shrink-0" />
+              <div className="flex-1 space-y-3">
+                <Skeleton className="h-5 w-1/3" />
+                <Skeleton className="h-9 w-full" />
+              </div>
+            </Card>
+          ))}
+        </div>
+      ) : orders.length === 0 ? (
+        <EmptyState
+          icon="📦"
+          title="No orders yet"
+          description="When an NGO requests one of your listings, it will show up here."
+        />
+      ) : (
+        <div className="space-y-4">
+          {orders.map((order) => (
+            <Card key={order._id} className="p-4 sm:p-5">
+              <div className="flex flex-col sm:flex-row gap-4">
+                <img
+                  src={foodImage(order.listings?.[0]?.food_type, order._id)}
+                  alt="Order"
+                  className="h-40 sm:h-28 sm:w-28 w-full object-cover rounded-xl shrink-0"
+                  loading="lazy"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs text-stone-400">Requested by</p>
+                      <h3 className="text-lg font-semibold text-stone-900 dark:text-white">
+                        {order.ngo_name || 'NGO'}
+                      </h3>
+                    </div>
+                    <StatusBadge status={order.status} />
+                  </div>
+
+                  {order.status === 'requested' && (
+                    <div className="mt-3 flex gap-2">
+                      <Button
+                        className="flex-1"
+                        loading={actingId === order._id}
+                        onClick={() => handleAccept(order._id)}
+                      >
+                        <FiCheck /> Accept
+                      </Button>
+                      <Button
+                        variant="danger"
+                        className="flex-1"
+                        loading={actingId === order._id}
+                        onClick={() => handleDecline(order._id)}
+                      >
+                        <FiX /> Decline
+                      </Button>
+                    </div>
+                  )}
+
+                  {order.status === 'accepted' && (
+                    <div className="mt-3 space-y-3">
+                      <CodeField label="Your pickup code" code={order.rest_code} onCopy={() => copyCode(order.rest_code)} />
+                      <div className="flex gap-2">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => { setSelectedOrder(order); setCancelError(''); setShowCancel(true); }}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => { setSelectedOrder(order); setFulfillError(''); setShowFulfill(true); }}
+                        >
+                          <FiCheck size={14} /> Fulfill
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  <ReviewBlock label="Your review" review={order.rest_review} sentiment={order.rest_sentiment} />
+                  <ReviewBlock label="NGO review" review={order.ngo_review} sentiment={order.ngo_sentiment} />
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => { setSelectedOrder(order); setShowListings(true); }}>
+                      <FiList size={14} /> Items
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => handleDirections(order.ngo_id)}>
+                      <FiNavigation size={14} /> Directions
+                    </Button>
+                    {canChat(order) && (
+                      <Link to={`/chat/${order._id}`}>
+                        <Button variant="ghost" size="sm">
+                          <FiMessageCircle size={14} /> Chat
+                        </Button>
+                      </Link>
+                    )}
+                    {canReview(order) && (
+                      <Button variant="subtle" size="sm" onClick={() => { setSelectedOrder(order); setReviewText(''); setShowReview(true); }}>
+                        <FiStar size={14} /> Review
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Map modal */}
+      <Modal open={showMap && !!routeData} onClose={() => setShowMap(false)} title="Route to NGO" size="lg">
+        {routeData && (
+          <MapContainer center={routeData.route[0]} zoom={13} style={{ height: '360px', width: '100%', borderRadius: '0.75rem' }}>
             <TileLayer
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               attribution="&copy; OpenStreetMap contributors"
             />
-            <Polyline positions={routeData.route} color="blue" />
+            <Polyline positions={routeData.route} color="#059669" weight={5} />
             <Marker position={routeData.route[0]}>
               <Popup>Restaurant (Origin)</Popup>
             </Marker>
             <Marker position={routeData.route[routeData.route.length - 1]}>
               <Popup>NGO (Destination)</Popup>
             </Marker>
-            <Marker position={routeData.optimal_meeting_point}>
-              <Popup>Optimal Meeting Point</Popup>
-            </Marker>
+            {routeData.optimal_meeting_point && (
+              <Marker position={routeData.optimal_meeting_point}>
+                <Popup>Optimal Meeting Point</Popup>
+              </Marker>
+            )}
           </MapContainer>
-        </div>
-      </div>
-)}
-      {orders.map((order, index) => {
-        const canReview = canReviewOrder(order);
-        const reviewAdded = order.restReview || order.ngoReview;
+        )}
+      </Modal>
 
-        return (
-          <div key={order._id} className={`order-card shadow-lg p-4 mb-4 flex flex-col md:flex-row items-center relative ${isDarkMode ? 'text-gray-300 bg-gray-700' : 'text-gray-600 hover:bg-gray-100 transition duration-300 ease-in-out'}`}>
-            <button
-         onClick={() => handleDirectionsClick(order.ngo_id)}
-        className="bg-blue-500 text-white font-semibold py-2 px-4 rounded mb-4"
-      >
-        Directions
-      </button>
-            <div
-              className={`absolute top-0 right-0 mt-2 mr-2 text-white font-semibold py-1 px-2 capitalize rounded 
-                ${order.status === 'requested' ? 'bg-yellow-500'
-                  : order.status === 'accepted' ? 'bg-green-500'
-                    : order.status === 'fulfilled' ? 'bg-blue-500'
-                      : order.status === 'cancelled' ? 'bg-red-500'
-                        : order.status === 'dismissed' ? 'bg-brown-500'
-                          : 'bg-gray-500'}`}
-            >
-              {order.status}
-            </div>
-            <img src={imageUrls[index % 10]} alt="Order" className="h-1/2 w-auto mb-4 md:w-1/4 md:h-auto md:mr-4 rounded-md" />
-            <div className="h-1/2 w-full md:w-3/4 flex flex-col">
-              <p className="text-md uppercase md:text-lg font-bold">NGO: {order.ngoName}</p>
-              {order.status === 'requested' && (
-                <div className="flex mt-2">
-                  <button
-                    onClick={() => handleAccept(order._id)}
-                    className="btn btn-green w-1/2 mr-2 px-4 py-2 rounded-md bg-green-500 hover:bg-green-600 text-white hover:text-white transition duration-300 ease-in-out"
-                  >
-                    Accept
-                  </button>
-                  <button
-                    onClick={() => handleDecline(order._id)}
-                    className="btn btn-red w-1/2 px-4 py-2 rounded-md bg-red-500 hover:bg-red-600 text-white hover:text-white transition duration-300 ease-in-out"
-                  >
-                    Decline
-                  </button>
-                </div>
-              )}
-              {order.status === 'accepted' && (
-                <div className="flex mt-2">
-                  <button
-                    onClick={() => {
-                      setSelectedOrder(order);
-                      setShowCancelModal(true);
-                    }}
-                    className="btn btn-red font-bold text-xs mr-1 w-1/4 px-2 py-1 md:text-lg md:mr-2 md:w-1/4 md:px-4 md:py-2 lg:mr-2 lg:w-1/4 lg:px-4 lg:py-2 rounded-md bg-red-500 hover:bg-red-600 text-white hover:text-white transition duration-300 ease-in-out"
-                  >
-                    Cancelled
-                  </button>
-                  <button
-                    onClick={() => {
-                      setSelectedOrder(order);
-                      setShowFulfillModal(true);
-                    }}
-                    className="btn btn-green font-bold text-xs mr-1 w-1/4 px-2 py-1 md:text-lg md:mr-2 md:w-1/4 md:px-4 md:py-2 lg:mr-2 lg:w-1/4 lg:px-4 lg:py-2 rounded-md bg-green-500 hover:bg-green-600 text-white hover:text-white transition duration-300 ease-in-out"
-                  >
-                    Fulfilled
-                  </button>
-                  {/* <Link to={`/chat/${order._id}`}>
-                    <button
-                      className="btn btn-blue px-4 py-2 rounded-md bg-blue-500 hover:bg-blue-600 text-white hover:text-white transition duration-300 ease-in-out"
-                    >
-                      Chat
-                    </button>
-                  </Link> */}
-                  <div className="w-1/2 md:ml-4">
-                    <label className={`block text-xs font-medium md:text-sm text-gray-700 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>Unique Restaurant Code:</label>
-                    <div className="flex items-center">
-                      <input
-                        type="text"
-                        className={`flex-1 block w-2/3 md:text-md md:w-2/3 md:py-2 lg:w-3/4 lg:py-2 border-gray-300 rounded-md shadow-lg focus:ring-indigo-500 focus:border-indigo-500 ${isDarkMode ? 'bg-gray-600' : ''}`}
-                        value={order.rest_code}
-                        readOnly
-                      />
-                      <button
-                        className="w-1/3 text-xs font-bold px-2 py-1 ml-1 md:text-sm md:ml-2 md:w-1/3 md:px-4 md:py-2 lg:ml-2 lg:w-1/4 lg:px-4 lg:py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                        onClick={() => {
-                          navigator.clipboard.writeText(order.rest_code);
-                          alert('Code copied to clipboard!');
-                        }}
-                      >
-                        Copy
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {order.rest_review && (
-                <div className={`bg-gray-100 p-2 md:p-4 rounded-md mt-2 ${isDarkMode ? 'bg-gray-600 hover:bg-gray-500 transition duration-300 ease-in-out' : 'hover:bg-gray-200 transition duration-300 ease-in-out'} relative`}>
-                  {/* Display sentiment label only if reviewSentiment is not an empty string */}
-                  {order.rest_sentiment && (
-                    <span className={`absolute top-2 right-2 text-xs font-semibold ${order.rest_sentiment === 'Positive' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'} p-1 rounded-md`}>
-                      {order.rest_sentiment}
-                    </span>
-                  )}
-
-                  <p className="text-xs md:text-sm font-semibold hover:bg-gray-200 transition duration-300 ease-in-out">Restaurant Review:</p>
-                  <p className="text-xs md:text-sm">{order.rest_review}</p>
-                </div>
-              )}
-
-              {order.ngo_review && (
-                <div className={`bg-gray-100 p-2 md:p-4 rounded-md mt-2 ${isDarkMode ? 'bg-gray-600 hover:bg-gray-500 transition duration-300 ease-in-out' : 'hover:bg-gray-200 transition duration-300 ease-in-out'} relative`}>
-                  {/* Display sentiment label only if reviewSentiment is not an empty string */}
-                  {order.ngo_sentiment && (
-                    <span className={`absolute top-2 right-2 text-xs font-semibold ${order.ngo_sentiment === 'Positive' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'} p-1 rounded-md`}>
-                      {order.ngo_sentiment}
-                    </span>
-                  )}
-
-                  <p className="text-xs md:text-sm font-semibold hover:bg-gray-200 transition duration-300 ease-in-out">NGO Review:</p>
-                  <p className="text-xs md:text-sm">{order.ngo_review}</p>
-                </div>
-              )}
-
-              {canReview && (
-                <button
-                  onClick={() => {
-                    setSelectedOrder(order);
-                    setShowReviewModal(true);
-                  }}
-                  className="btn btn-blue font-bold mt-2 px-2 py-1 md:px-4 md:py-2 rounded-md bg-blue-500 hover:bg-blue-600 text-white hover:text-white transition duration-300 ease-in-out"
-                >
-                  Review
-                </button>
-              )}
-
-              {(order.status === 'accepted' || order.status === 'fulfilled' || order.status === 'cancelled' || order.status === 'dismissed') && (
-                <Link to={`/chat/${order._id}`} className="block w-full mt-2">
-                  <button
-                    className="btn btn-blue px-2 py-1 md:px-4 md:py-2 w-full font-bold rounded-md bg-blue-500 hover:bg-blue-600 text-white hover:text-white transition duration-300 ease-in-out"
-                  >
-                    Chat
-                  </button>
-                </Link>
-              )}
-
-              <button
-                onClick={() => handleViewListings(order)}
-                className="bg-blue-500 hover:bg-blue-700 text-white font-bold px-2 py-1 md:py-2 md:px-4 rounded mt-2"
-              >
-                View Listings Requested
-              </button>
-            </div>
-          </div>
-        )
-      })}
-
-      {/* Modal for viewing listings */}
-      {selectedOrder && showModal && (
-        <div className="fixed inset-0 flex items-center justify-center z-50">
-          <div className="absolute inset-0 bg-black opacity-50"></div>
-          <div className="modal bg-white p-8 rounded-lg z-50 relative">
-            <button onClick={() => setShowModal(false)} className="modal-close absolute top-4 right-4 text-gray-600 hover:text-gray-900">
-              &#x2715;
-            </button>
-            <h2 className="text-xl font-semibold mb-4">Listings for Order ID: {selectedOrder._id}</h2>
-            <ul>
-              {selectedOrder.listings.map((listing, index) => (
-                <li key={index} className="mb-2">
-                  <span className="font-semibold">Name:</span> {listing.name},
-                  <span className="ml-2 font-semibold">Quantity:</span> {listing.quantity} kgs,
-                  <span className="ml-2 font-semibold">Food Type:</span> {listing.food_type},
-                  <span className="ml-2 font-semibold">Expiry:</span> {listing.expiry} hr
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      )}
-
-      {/* Cancel Modal */}
-      {selectedOrder && showCancelModal && (
-        <div className="fixed inset-0 flex items-center justify-center z-50">
-          <div className="absolute inset-0 bg-black opacity-50"></div>
-          <div className="modal bg-white p-8 rounded-lg z-50 relative">
-            <button onClick={() => setShowCancelModal(false)} className="modal-close absolute top-4 right-4 text-gray-600 hover:text-gray-900">
-              &#x2715;
-            </button>
-            <h2 className="text-xl font-semibold mb-4">Enter Code to Cancel Order</h2>
-            <input
-              type="text"
-              className="border p-2 rounded-md w-full mb-4"
-              placeholder="Enter code"
-              value={cancelCode}
-              onChange={(e) => setCancelCode(e.target.value)}
-            />
-            <button onClick={handleCancel} className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded">
-              Cancel Order
-            </button>
-            {cancelMessage && <p className="mt-4 text-red-500">{cancelMessage}</p>}
-          </div>
-        </div>
-      )}
-
-      {/* Fulfill Modal */}
-      {selectedOrder && showFulfillModal && (
-        <div className="fixed inset-0 flex items-center justify-center z-50">
-          <div className="absolute inset-0 bg-black opacity-50"></div>
-          <div className="modal bg-white p-8 rounded-lg z-50 relative">
-            <button onClick={() => setShowFulfillModal(false)} className="modal-close absolute top-4 right-4 text-gray-600 hover:text-gray-900">
-              &#x2715;
-            </button>
-            <h2 className="text-xl font-semibold mb-4">Enter Code to Fulfill Order</h2>
-            <input
-              type="text"
-              className="border p-2 rounded-md w-full mb-4"
-              placeholder="Enter code"
-              value={fulfillCode}
-              onChange={(e) => setFulfillCode(e.target.value)}
-            />
-            <button onClick={handleFulfill} className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">
-              Fulfill Order
-            </button>
-            {fulfillMessage && <p className="mt-4 text-green-500">{fulfillMessage}</p>}
-          </div>
-        </div>
-      )}
-
-      {/* Review Modal */}
-      {selectedOrder && showReviewModal && (
-        <div className="fixed inset-0 flex items-center justify-center z-50">
-          <div className="absolute inset-0 bg-black opacity-50"></div>
-          <div className="modal bg-white p-8 rounded-lg z-50 relative">
-            <button onClick={() => setShowReviewModal(false)} className="modal-close absolute top-4 right-4 text-gray-600 hover:text-gray-900">
-              &#x2715;
-            </button>
-            <h2 className="text-xl font-semibold mb-4">Review for Order ID: {selectedOrder._id}</h2>
-            <textarea
-              className="border p-2 rounded-md w-full mb-4"
-              placeholder="Write your review here"
-              value={reviewText}
-              onChange={(e) => setReviewText(e.target.value)}
-            />
-            <button onClick={postReview} className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">
-              Submit Review
-            </button>
-            {reviewMessage && <p className="mt-4 text-green-500">{reviewMessage}</p>}
-          </div>
-        </div>
-      )}
+      <ListingsModal open={showListings} onClose={() => setShowListings(false)} order={selectedOrder} />
+      <CodeModal
+        open={showCancel}
+        onClose={() => setShowCancel(false)}
+        title="Cancel order"
+        actionLabel="Cancel order"
+        variant="danger"
+        value={cancelCode}
+        onChange={(e) => setCancelCode(e.target.value)}
+        onSubmit={handleCancel}
+        loading={submitting}
+        error={cancelError}
+      />
+      <CodeModal
+        open={showFulfill}
+        onClose={() => setShowFulfill(false)}
+        title="Fulfill order"
+        actionLabel="Fulfill order"
+        value={fulfillCode}
+        onChange={(e) => setFulfillCode(e.target.value)}
+        onSubmit={handleFulfill}
+        loading={submitting}
+        error={fulfillError}
+      />
+      <ReviewModal
+        open={showReview}
+        onClose={() => setShowReview(false)}
+        onSubmit={postReview}
+        loading={submitting}
+        value={reviewText}
+        onChange={(e) => setReviewText(e.target.value)}
+      />
     </div>
   );
 };

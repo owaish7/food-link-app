@@ -1,329 +1,307 @@
-import React, { useState, useEffect } from 'react';
-import { useAuth } from '../../context/AuthContext';
-import CardImage from '../../assets/food-link-card-img.jpg';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
-import '../../App.css';
-import { useDarkMode } from '../../context/DarkModeContext';
+import { FiPlus, FiEdit2, FiTrash2, FiClock, FiPackage, FiLock } from 'react-icons/fi';
+import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
+import { useOrderUpdates } from '../../context/SocketContext';
 import { API_URL } from '../../config';
+import { foodImage } from '../../lib/foodImages';
+import PageHeader from '../../components/ui/PageHeader';
+import Button from '../../components/ui/Button';
+import Card from '../../components/ui/Card';
+import Modal from '../../components/ui/Modal';
+import Skeleton from '../../components/ui/Skeleton';
+import EmptyState from '../../components/ui/EmptyState';
+import { Badge } from '../../components/ui/Badge';
+import { Input, Select, Label } from '../../components/ui/Input';
+
+const emptyForm = { name: '', quantity: '', expiry: '', food_type: '' };
+
+function ListingFields({ form, setForm }) {
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  return (
+    <div className="space-y-4">
+      <div>
+        <Label>Food name</Label>
+        <Input placeholder="e.g. Veg Biryani" value={form.name} onChange={set('name')} />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label>Quantity (kg)</Label>
+          <Input type="number" min="1" placeholder="20" value={form.quantity} onChange={set('quantity')} />
+        </div>
+        <div>
+          <Label>Expiry</Label>
+          <Select value={form.expiry} onChange={set('expiry')}>
+            <option value="">Select</option>
+            <option value="1">1 hr</option>
+            <option value="2">2 hrs</option>
+            <option value="3">3 hrs</option>
+          </Select>
+        </div>
+      </div>
+      <div>
+        <Label>Food type</Label>
+        <Select value={form.food_type} onChange={set('food_type')}>
+          <option value="">Select</option>
+          <option value="Vegetarian">Vegetarian</option>
+          <option value="Non-Vegetarian">Non-Vegetarian</option>
+          <option value="Vegan">Vegan</option>
+        </Select>
+      </div>
+    </div>
+  );
+}
 
 const RestaurantListingsPage = () => {
-
-  const imageUrls = [
-    "https://images.pexels.com/photos/262978/pexels-photo-262978.jpeg?auto=compress&cs=tinysrgb&w=600",
-    "https://images.pexels.com/photos/958545/pexels-photo-958545.jpeg?auto=compress&cs=tinysrgb&w=600",
-    "https://images.pexels.com/photos/1537635/pexels-photo-1537635.jpeg?auto=compress&cs=tinysrgb&w=600",
-    "https://images.pexels.com/photos/2696064/pexels-photo-2696064.jpeg?auto=compress&cs=tinysrgb&w=600",
-    "https://images.pexels.com/photos/262918/pexels-photo-262918.jpeg?auto=compress&cs=tinysrgb&w=600",
-    "https://images.pexels.com/photos/1211887/pexels-photo-1211887.jpeg?auto=compress&cs=tinysrgb&w=600",
-    "https://images.pexels.com/photos/693269/pexels-photo-693269.jpeg?auto=compress&cs=tinysrgb&w=600",
-    "https://images.pexels.com/photos/858508/pexels-photo-858508.jpeg?auto=compress&cs=tinysrgb&w=600",
-    "https://images.pexels.com/photos/2074130/pexels-photo-2074130.jpeg?auto=compress&cs=tinysrgb&w=600",
-    "https://images.pexels.com/photos/671956/pexels-photo-671956.jpeg?auto=compress&cs=tinysrgb&w=600",
-  ];
-
   const { user } = useAuth();
-  const restaurantId = user._id;
-  const { isDarkMode } = useDarkMode();
-
-  const [newName, setNewName] = useState('');
-  const [newQuantity, setNewQuantity] = useState('');
-  const [newExpiry, setNewExpiry] = useState('');
-  const [newFoodType, setNewFoodType] = useState('');
-
-  const [selectedName, setSelectedName] = useState('');
-  const [selectedQuantity, setSelectedQuantity] = useState('');
-  const [selectedExpiry, setSelectedExpiry] = useState('');
-  const [selectedFoodType, setSelectedFoodType] = useState('');
+  const restaurantId = user?._id;
+  const toast = useToast();
 
   const [listings, setListings] = useState([]);
-  const [feedback, setFeedback] = useState('');
+  const [loading, setLoading] = useState(true);
 
-  const [showUpdateModal, setShowUpdateModal] = useState(false);
-  const [selectedListing, setSelectedListing] = useState(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [addForm, setAddForm] = useState(emptyForm);
+  const [adding, setAdding] = useState(false);
 
-  const [buttonText, setButtonText] = useState('');
-  const [showFeedback, setShowFeedback] = useState(false);
+  const [editing, setEditing] = useState(null); // the listing being edited
+  const [editForm, setEditForm] = useState(emptyForm);
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const [deletingId, setDeletingId] = useState(null);
+
+  const fetchListings = useCallback(async () => {
+    if (!restaurantId) return;
+    try {
+      const response = await axios.get(`${API_URL}/listings/${restaurantId}`);
+      setListings(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.error('Error fetching listings:', error);
+      toast.error('Failed to load listings.');
+    } finally {
+      setLoading(false);
+    }
+  }, [restaurantId, toast]);
 
   useEffect(() => {
-    const fetchListings = async () => {
-      try {
-        const response = await axios.get(`${API_URL}/listings/${restaurantId}`);
-        setListings(response.data);
-      } catch (error) {
-        console.error('Error fetching listings:', error);
-        setFeedback('Failed to fetch listings.');
-      }
-    };
-
     fetchListings();
-  }, [restaurantId]);
+  }, [fetchListings]);
 
-  const handleAddListing = async () => {
-    setButtonText('Adding...');
+  // A listing gets "blocked" when an NGO's order is accepted — refresh live.
+  useOrderUpdates(fetchListings);
+
+  const validate = (form) =>
+    form.name && Number(form.quantity) > 0 && form.expiry && form.food_type;
+
+  const handleAdd = async () => {
+    if (!validate(addForm)) {
+      toast.error('Please fill in all fields.');
+      return;
+    }
+    setAdding(true);
     try {
-      const newListing = {
+      await axios.post(`${API_URL}/listings`, {
         restaurantId,
-        name: newName,
-        quantity: parseInt(newQuantity),
-        expiry: parseInt(newExpiry),
-        food_type: newFoodType,
-        view: "not blocked",
-        image: CardImage,
-      };
-      const response = await axios.post(`${API_URL}/listings`, newListing);
-      setListings([...listings, response.data]);
-      setNewName('');
-      setNewQuantity('');
-      setNewExpiry('');
-      setNewFoodType('');
-      setFeedback('Listing added successfully.');
-      setShowFeedback(true);
+        name: addForm.name,
+        quantity: parseInt(addForm.quantity, 10),
+        expiry: parseInt(addForm.expiry, 10),
+        food_type: addForm.food_type,
+        view: 'not blocked',
+      });
+      await fetchListings();
+      setShowAdd(false);
+      setAddForm(emptyForm);
+      toast.success('Listing added.');
     } catch (error) {
       console.error('Error adding listing:', error);
-      setFeedback('Failed to add listing.');
-      setShowFeedback(true);
+      toast.error(error.response?.data?.message || 'Failed to add listing.');
+    } finally {
+      setAdding(false);
     }
-    setTimeout(() => {
-      setButtonText('');
-      setShowFeedback(false);
-    }, 1000);
   };
 
-  const handleDeleteListing = async (id) => {
-    setButtonText('Deleting...');
+  const openEdit = (listing) => {
+    setEditing(listing);
+    setEditForm({
+      name: listing.name,
+      quantity: String(listing.quantity),
+      expiry: String(listing.expiry),
+      food_type: listing.food_type,
+    });
+  };
+
+  const handleEdit = async () => {
+    if (!editing || !validate(editForm)) {
+      toast.error('Please fill in all fields.');
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      await axios.put(`${API_URL}/listings/${editing._id}`, {
+        ...editing,
+        name: editForm.name,
+        food_type: editForm.food_type,
+        quantity: parseInt(editForm.quantity, 10),
+        expiry: parseInt(editForm.expiry, 10),
+      });
+      await fetchListings();
+      setEditing(null);
+      toast.success('Listing updated.');
+    } catch (error) {
+      console.error('Error updating listing:', error);
+      toast.error(error.response?.data?.message || 'Failed to update listing.');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Delete this listing? This cannot be undone.')) return;
+    setDeletingId(id);
     try {
       await axios.delete(`${API_URL}/listings/${id}`);
-      const updatedListings = listings.filter((listing) => listing._id !== id);
-      setListings(updatedListings);
-      setFeedback('Listing deleted successfully.');
-      setShowFeedback(true);
+      await fetchListings();
+      toast.success('Listing deleted.');
     } catch (error) {
       console.error('Error deleting listing:', error);
-      setFeedback('Failed to delete listing.');
-      setShowFeedback(true);
-    }
-    setTimeout(() => {
-      setButtonText('');
-      setShowFeedback(false);
-    }, 1000);
-  };
-
-  const handleOpenUpdateModal = (listing) => {
-    setSelectedListing(listing);
-    setSelectedName(listing.name);
-    setSelectedFoodType(listing.food_type);
-    setSelectedQuantity(listing.quantity.toString());
-    setSelectedExpiry(listing.expiry.toString());
-    setShowUpdateModal(true);
-  };
-
-  const handleCloseUpdateModal = () => {
-    setShowUpdateModal(false);
-    setSelectedListing(null);
-  };
-
-  const handleUpdateListing = async () => {
-    setButtonText('Updating...');
-    if (selectedListing) {
-      try {
-        const updatedListing = {
-          ...selectedListing,
-          name: selectedName,
-          food_type: selectedFoodType,
-          quantity: parseInt(selectedQuantity),
-          expiry: parseInt(selectedExpiry),
-        };
-        console.log("selected Listing")
-        console.log(selectedListing)
-        console.log(selectedListing._id)
-        console.log("Updated Listing")
-        console.log(updatedListing)
-
-        const response = await axios.put(`${API_URL}/listings/${selectedListing._id}`, updatedListing);
-
-        const updatedListings = listings.map((listing) =>
-          listing._id === response.data._id ? response.data : listing
-        );
-
-        setListings(updatedListings);
-        setShowUpdateModal(false);
-        setSelectedListing(null);
-        setSelectedName('');
-        setSelectedQuantity('');
-        setSelectedFoodType('');
-        setSelectedExpiry('');
-        setFeedback('Listing updated successfully.');
-        setShowFeedback(true);
-      } catch (error) {
-        console.error('Error updating listing:', error);
-        setFeedback('Failed to update listing.');
-        setShowFeedback(true);
-      }
-      setTimeout(() => {
-        setButtonText('');
-        setShowFeedback(false);
-      }, 1000);
+      toast.error('Failed to delete listing.');
+    } finally {
+      setDeletingId(null);
     }
   };
 
   return (
-    <div className={`container mx-auto p-8 pb-24 ${isDarkMode ? 'bg-gray-800' : 'bg-gray-200'}`}>
-      {showFeedback && <div className={`feedback text-white`}>{feedback}</div>}
-      <div className="mb-8">
-        <h1 className={`text-2xl font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-600'}`}>Add New Listing</h1>
-        <div className="grid sm:grid-cols-1 md:grid-cols-4 gap-4">
-          <input
-            type="text"
-            placeholder="Name"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            className={`p-2 text-sm border rounded-md ${isDarkMode ? 'text-gray-300 bg-gray-700' : 'text-gray-600 bg-white'}`}
-          />
-          <input
-            type="number"
-            placeholder="Quantity in kgs"
-            value={newQuantity}
-            onChange={(e) => setNewQuantity(e.target.value)}
-            className={`p-2 border rounded-md ${isDarkMode ? 'text-gray-300 bg-gray-700' : 'text-gray-600 bg-white'}`}
-          />
-          <select
-            value={newExpiry}
-            onChange={(e) => setNewExpiry(e.target.value)}
-            className={`p-2 border rounded-md ${isDarkMode ? 'text-gray-300 bg-gray-700' : 'text-gray-600 bg-white'}`}
-          >
-            <option value="">Select Expiry</option>
-            <option value="1">1 hr</option>
-            <option value="2">2 hrs</option>
-            <option value="3">3 hrs</option>
-          </select>
+    <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8 min-h-[70vh]">
+      <PageHeader
+        title="My Listings"
+        subtitle="Post surplus food so nearby NGOs can request it before it expires."
+        action={
+          <Button onClick={() => { setAddForm(emptyForm); setShowAdd(true); }}>
+            <FiPlus /> New listing
+          </Button>
+        }
+      />
 
-          <select
-            value={newFoodType}
-            onChange={(e) => setNewFoodType(e.target.value)}
-            className={`p-2 border rounded-md ${isDarkMode ? 'text-gray-300 bg-gray-700' : 'text-gray-600 bg-white'}`}
-          >
-            <option value="">Select Food Type</option>
-            <option value="Vegetarian">Vegetarian</option>
-            <option value="Non-Vegetarian">Non-Vegetarian</option>
-            <option value="Vegan">Vegan</option>
-          </select>
-          <button
-            onClick={handleAddListing}
-            className={`sm:col-span-1 md:col-span-4 p-2 bg-blue-500 text-white rounded-md relative ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}
-          >
-            {buttonText || 'Add'}
-            {buttonText && <div className="overlay"></div>}
-          </button>
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Card key={i} className="overflow-hidden">
+              <Skeleton className="h-44 w-full rounded-none" />
+              <div className="p-4 space-y-3">
+                <Skeleton className="h-5 w-2/3" />
+                <Skeleton className="h-16 w-full" />
+              </div>
+            </Card>
+          ))}
         </div>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-        {listings.map((listing, index) => (
-          <div key={index} className="card">
-            <div className="relative w-full h-48 overflow-hidden">
-              <img
-                src={imageUrls[(index % 10)]}
-                alt={listing.name}
-                className="object-cover w-full h-full"
-              />
-            </div>
-            <h2 className={`text-lg font-semibold mt-4 ${isDarkMode ? 'text-gray-300' : 'text-gray-800'}`}>
-              {listing.name}
-            </h2>
-            <div className={`mt-4 p-2 rounded-sm w-full ${isDarkMode ? 'text-gray-300 bg-gray-600' : 'text-gray-800 bg-gray-100'}`}>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="flex flex-col gap-1">
-                  <span className={`text-xs font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-                    Quantity
-                  </span>
-                  <span className={`text-xs font-bold ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-                    {listing.quantity}
-                  </span>
+      ) : listings.length === 0 ? (
+        <EmptyState
+          icon="🍽️"
+          title="No listings yet"
+          description="Add your first surplus-food listing and NGOs nearby will be able to request it."
+          action={
+            <Button onClick={() => setShowAdd(true)}>
+              <FiPlus /> Add a listing
+            </Button>
+          }
+        />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {listings.map((listing) => {
+            const blocked = listing.view === 'blocked';
+            return (
+              <Card key={listing._id} hover className="overflow-hidden flex flex-col">
+                <div className="relative h-44 w-full overflow-hidden">
+                  <img
+                    src={foodImage(listing.food_type, listing._id)}
+                    alt={listing.name}
+                    className="h-full w-full object-cover"
+                    loading="lazy"
+                  />
+                  <div className="absolute top-3 left-3">
+                    <Badge tone={blocked ? 'gray' : 'brand'} dot>
+                      {blocked ? 'In an order' : 'Available'}
+                    </Badge>
+                  </div>
                 </div>
-                <div className="flex flex-col gap-1">
-                  <span className={`text-xs font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-                    Expiry
-                  </span>
-                  <span className={`text-xs font-bold ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-                    {listing.expiry} hr
-                  </span>
+                <div className="p-4 flex flex-col flex-1">
+                  <h3 className="text-lg font-semibold text-stone-900 dark:text-white">{listing.name}</h3>
+                  <div className="mt-3 grid grid-cols-3 gap-2 rounded-xl bg-stone-50 dark:bg-stone-800/60 p-3 text-center">
+                    <div>
+                      <div className="flex items-center justify-center gap-1 text-xs text-stone-400"><FiPackage size={12} /> Qty</div>
+                      <div className="mt-0.5 font-semibold text-stone-800 dark:text-stone-100">{listing.quantity} kg</div>
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-center gap-1 text-xs text-stone-400"><FiClock size={12} /> Expiry</div>
+                      <div className="mt-0.5 font-semibold text-stone-800 dark:text-stone-100">{listing.expiry} hr</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-stone-400">Type</div>
+                      <div className="mt-0.5 font-semibold text-stone-800 dark:text-stone-100 text-xs">{listing.food_type}</div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 pt-1 flex-1 flex items-end">
+                    {blocked ? (
+                      <p className="flex items-center gap-1.5 text-sm text-stone-400 dark:text-stone-500">
+                        <FiLock size={14} /> Locked while in an active order
+                      </p>
+                    ) : (
+                      <div className="flex gap-2 w-full">
+                        <Button variant="secondary" size="sm" className="flex-1" onClick={() => openEdit(listing)}>
+                          <FiEdit2 size={14} /> Edit
+                        </Button>
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          className="flex-1"
+                          loading={deletingId === listing._id}
+                          onClick={() => handleDelete(listing._id)}
+                        >
+                          <FiTrash2 size={14} /> Delete
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="flex flex-col gap-1">
-                  <span className={`text-xs font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-                    Food Type
-                  </span>
-                  <span className={`text-xs font-bold ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-                    {listing.food_type}
-                  </span>
-                </div>
-              </div>
-            </div>
-            {listing.view !== 'blocked' && (
-              <div className="flex justify-between mt-4">
-                <button onClick={() => handleOpenUpdateModal(listing)} className="bg-blue-500 text-white px-4 py-2 rounded-md">
-                  Update
-                </button>
-                <button onClick={() => handleDeleteListing(listing._id)} className="bg-red-500 text-white px-4 py-2 rounded-md">
-                  Delete
-                </button>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-      {showUpdateModal && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white text-black p-8 rounded-md relative">
-            <button onClick={handleCloseUpdateModal} className="absolute top-0 right-0 p-2">
-              Close
-            </button>
-            <h2 className={`text-xl font-semibold mb-4`}>Update Listing</h2>
-            <div className="grid grid-cols-4 gap-4">
-              <input
-                type="text"
-                placeholder="Name"
-                value={selectedName}
-                onChange={(e) => setSelectedName(e.target.value)}
-                className={`p-2 border rounded-md`}
-              />
-              <input
-                type="number"
-                placeholder="Quantity in kgs"
-                value={selectedQuantity}
-                onChange={(e) => setSelectedQuantity(e.target.value)}
-                className={`p-2 border rounded-md`}
-              />
-              <select
-                value={selectedExpiry}
-                onChange={(e) => setSelectedExpiry(e.target.value)}
-                className={`p-2 border rounded-md`}
-              >
-                <option value="">Select Expiry</option>
-                <option value="1">1 hr</option>
-                <option value="2">2 hrs</option>
-                <option value="3">3 hrs</option>
-              </select>
-              <select
-                value={selectedFoodType}
-                onChange={(e) => setSelectedFoodType(e.target.value)}
-                className={`p-2 border rounded-md`}
-              >
-                <option value="">Select Food Type</option>
-                <option value="Vegetarian">Vegetarian</option>
-                <option value="Non-Vegetarian">Non-Vegetarian</option>
-                <option value="Vegan">Vegan</option>
-              </select>
-              <button onClick={handleUpdateListing} className={`col-span-4 p-2 bg-blue-500 text-white rounded-md`}>
-                Update
-              </button>
-            </div>
-          </div>
+              </Card>
+            );
+          })}
         </div>
       )}
-      {showFeedback && <div className={`feedback-box`}>{feedback}</div>}
+
+      {/* Add modal */}
+      <Modal
+        open={showAdd}
+        onClose={() => setShowAdd(false)}
+        title="Add a listing"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowAdd(false)}>Cancel</Button>
+            <Button loading={adding} onClick={handleAdd}>Add listing</Button>
+          </>
+        }
+      >
+        <ListingFields form={addForm} setForm={setAddForm} />
+      </Modal>
+
+      {/* Edit modal */}
+      <Modal
+        open={!!editing}
+        onClose={() => setEditing(null)}
+        title="Update listing"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setEditing(null)}>Cancel</Button>
+            <Button loading={savingEdit} onClick={handleEdit}>Save changes</Button>
+          </>
+        }
+      >
+        <ListingFields form={editForm} setForm={setEditForm} />
+      </Modal>
     </div>
   );
-
-
 };
 
 export default RestaurantListingsPage;

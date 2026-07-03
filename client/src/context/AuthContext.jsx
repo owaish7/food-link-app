@@ -27,11 +27,11 @@ export const AuthProvider = ({ children }) => {
 
     const register = async (userData) => {
         try {
-            console.log(userData)
             await axios.post(`${API_URL}/register`, userData);
             await login({ email: userData.email, password: userData.password });
         } catch (error) {
             console.error('Registration error:', error.response?.data?.message || error.message);
+            throw error; // Re-throw so the page can show the reason
         }
     };
 

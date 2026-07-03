@@ -1,347 +1,263 @@
-import React, { useState, useEffect } from 'react';
-import CardImage from '../../assets/food-link-card-img.jpg';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import { FiCheck, FiPlus, FiClock, FiPackage, FiShoppingBag, FiStar, FiMapPin } from 'react-icons/fi';
 import { useAuth } from '../../context/AuthContext';
-import { useDarkMode } from '../../context/DarkModeContext';
+import { useToast } from '../../context/ToastContext';
+import { useOrderUpdates } from '../../context/SocketContext';
 import { API_URL } from '../../config';
+import { foodImage } from '../../lib/foodImages';
+import PageHeader from '../../components/ui/PageHeader';
+import Button from '../../components/ui/Button';
+import Skeleton from '../../components/ui/Skeleton';
+import EmptyState from '../../components/ui/EmptyState';
+import { Badge } from '../../components/ui/Badge';
+import { cn } from '../../lib/cn';
+
+const idOf = (l) => String(l._id || l.listingId || '');
+const ridOf = (l) => String(l.restaurant_id || l.restaurantId || '');
+const rnameOf = (l) => l.restaurant_name || l.restaurantName || 'Restaurant';
+
+function NgoCard({ listing, selected, onToggle }) {
+  return (
+    <div
+      className={cn(
+        'shrink-0 w-56 rounded-2xl border bg-white dark:bg-stone-900 shadow-card overflow-hidden transition-all',
+        selected
+          ? 'border-brand-500 ring-2 ring-brand-500/30'
+          : 'border-stone-200/80 dark:border-stone-800'
+      )}
+    >
+      <div className="h-28 w-full overflow-hidden">
+        <img
+          src={foodImage(listing.food_type, idOf(listing) || listing.name)}
+          alt={listing.name}
+          className="h-full w-full object-cover"
+          loading="lazy"
+        />
+      </div>
+      <div className="p-3">
+        <h3 className="font-semibold text-stone-900 dark:text-white truncate">{listing.name}</h3>
+        <p className="text-xs text-stone-400 truncate">{rnameOf(listing)}</p>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          <Badge tone="brand">{listing.food_type}</Badge>
+          <Badge tone="gray">
+            <FiPackage size={11} /> {listing.quantity}kg
+          </Badge>
+          <Badge tone="amber">
+            <FiClock size={11} /> {listing.expiry}h
+          </Badge>
+        </div>
+        <Button
+          variant={selected ? 'primary' : 'secondary'}
+          size="sm"
+          className="mt-3 w-full"
+          onClick={onToggle}
+        >
+          {selected ? (
+            <>
+              <FiCheck size={14} /> Selected
+            </>
+          ) : (
+            <>
+              <FiPlus size={14} /> Select
+            </>
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function Rail({ title, icon, items, isSelected, onToggle }) {
+  if (!items || items.length === 0) return null;
+  return (
+    <section className="mb-10">
+      <div className="mb-4 flex items-center gap-2">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-50 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400">
+          {icon}
+        </span>
+        <h2 className="font-display text-lg font-bold text-stone-900 dark:text-white">{title}</h2>
+      </div>
+      <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2">
+        {items.map((l) => (
+          <NgoCard key={idOf(l) || l.name} listing={l} selected={isSelected(l)} onToggle={() => onToggle(l)} />
+        ))}
+      </div>
+    </section>
+  );
+}
 
 const NGOListingsPage = () => {
-    const [selectedListings, setSelectedListings] = useState([]);
-    const [restaurants, setRestaurants] = useState([]);
-    const [recommendedItems, setRecommendedItems] = useState([]);
-    const [cbfItems, setCbfItems] = useState([]);
-    const { isDarkMode } = useDarkMode();
+  const { user } = useAuth();
+  const toast = useToast();
 
-    const imageUrls = [
-        "https://images.pexels.com/photos/262978/pexels-photo-262978.jpeg?auto=compress&cs=tinysrgb&w=600",
-        "https://images.pexels.com/photos/958545/pexels-photo-958545.jpeg?auto=compress&cs=tinysrgb&w=600",
-        "https://images.pexels.com/photos/1537635/pexels-photo-1537635.jpeg?auto=compress&cs=tinysrgb&w=600",
-        "https://images.pexels.com/photos/2696064/pexels-photo-2696064.jpeg?auto=compress&cs=tinysrgb&w=600",
-        "https://images.pexels.com/photos/262918/pexels-photo-262918.jpeg?auto=compress&cs=tinysrgb&w=600",
-        "https://images.pexels.com/photos/1211887/pexels-photo-1211887.jpeg?auto=compress&cs=tinysrgb&w=600",
-        "https://images.pexels.com/photos/693269/pexels-photo-693269.jpeg?auto=compress&cs=tinysrgb&w=600",
-        "https://images.pexels.com/photos/858508/pexels-photo-858508.jpeg?auto=compress&cs=tinysrgb&w=600",
-        "https://images.pexels.com/photos/2074130/pexels-photo-2074130.jpeg?auto=compress&cs=tinysrgb&w=600",
-        "https://images.pexels.com/photos/671956/pexels-photo-671956.jpeg?auto=compress&cs=tinysrgb&w=600",
-    ];
+  const [restaurants, setRestaurants] = useState({});
+  const [recommendedItems, setRecommendedItems] = useState([]);
+  const [cbfItems, setCbfItems] = useState([]);
+  const [selected, setSelected] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [requesting, setRequesting] = useState(false);
 
-    const { user } = useAuth();
+  const fetchAll = useCallback(async () => {
+    if (!user?._id) return;
+    const { longitude, latitude, _id: ngoId } = user;
+    try {
+      const [nearby, recs, cbf] = await Promise.allSettled([
+        axios.get(`${API_URL}/nearbyRestaurants`, { params: { ngoId, longitude, latitude } }),
+        axios.get(`${API_URL}/recommendations/ml`, { params: { ngo_id: ngoId } }),
+        axios.get(`${API_URL}/content-based-recommendations`, { params: { ngo_id: ngoId } }),
+      ]);
 
-    useEffect(() => {
-        const { longitude, latitude } = user;
-        const ngoId = user._id;
+      if (nearby.status === 'fulfilled') {
+        const grouped = {};
+        (nearby.value.data || []).forEach((listing) => {
+          const key = listing.restaurantName || 'Restaurant';
+          (grouped[key] = grouped[key] || []).push(listing);
+        });
+        setRestaurants(grouped);
+      }
+      if (recs.status === 'fulfilled') {
+        setRecommendedItems(Array.isArray(recs.value.data) ? recs.value.data : []);
+      }
+      if (cbf.status === 'fulfilled') {
+        setCbfItems(cbf.value.data?.recommendations || []);
+      }
+    } catch (error) {
+      console.error('Error fetching listings:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
 
-        const fetchNearbyListings = async () => {
-            try {
-                const response = await axios.get(`${API_URL}/nearbyRestaurants`, {
-                    params: {
-                        ngoId,
-                        longitude,
-                        latitude,
-                    },
-                });
-                // Group listings by restaurantName
-                const groupedRestaurants = {};
-                response.data.forEach((listing) => {
-                    if (!groupedRestaurants[listing.restaurantName]) {
-                        groupedRestaurants[listing.restaurantName] = [];
-                    }
-                    groupedRestaurants[listing.restaurantName].push(listing);
-                });
-                setRestaurants(groupedRestaurants);
-            } catch (error) {
-                console.error('Error fetching nearby listings:', error);
-            }
-        };
+  useEffect(() => {
+    fetchAll();
+  }, [fetchAll]);
 
-        const fetchRecommendations = async () => {
-            try {
-                const response = await axios.get(`${API_URL}/recommendations/ml`, {
-                    params: { ngo_id: user._id },
-                });
-                setRecommendedItems(response.data);
-            } catch (error) {
-                console.error('Error fetching recommendations:', error);
-            }
-        };
+  useOrderUpdates(fetchAll);
 
-        const fetchCbfRecommendations = async () => {
-            try {
-                const response = await axios.get(`${API_URL}/content-based-recommendations`, {
-                    params: { ngo_id: user._id },
-                });
-                setCbfItems(response.data.recommendations);
-            } catch (error) {
-                console.error('Error fetching recommendations:', error);
-            }
-        };
+  const isSelected = (l) => selected.some((s) => idOf(s) === idOf(l));
+  const toggle = (l) =>
+    setSelected((prev) => (isSelected(l) ? prev.filter((s) => idOf(s) !== idOf(l)) : [...prev, l]));
 
+  const handleRequest = async () => {
+    if (selected.length === 0) {
+      toast.error('Select at least one item to request.');
+      return;
+    }
+    setRequesting(true);
+    try {
+      // Group by restaurant so each order is single-restaurant (backend requires one).
+      const groups = {};
+      selected.forEach((l) => {
+        const rid = ridOf(l);
+        (groups[rid] = groups[rid] || []).push(l);
+      });
 
-        fetchNearbyListings();
-        fetchRecommendations();
-        fetchCbfRecommendations();
-    }, [user]);
+      for (const [rid, items] of Object.entries(groups)) {
+        // eslint-disable-next-line no-await-in-loop
+        await axios.post(`${API_URL}/orders`, {
+          restaurantId: rid,
+          ngoId: String(user._id),
+          listings: items.map((l) => ({
+            listing: idOf(l),
+            name: l.name,
+            quantity: l.quantity,
+            expiry: l.expiry,
+            food_type: l.food_type,
+            restaurant_id: rid,
+            restaurant_name: rnameOf(l),
+            view: 'not blocked',
+          })),
+        });
+      }
 
-    const handleSelect = (listing) => {
-        if (selectedListings.some((item) => item.name === listing.name)) {
-            setSelectedListings(selectedListings.filter((item) => item.name !== listing.name));
-        } else {
-            setSelectedListings([...selectedListings, listing]);
-        }
-    };
+      const count = Object.keys(groups).length;
+      toast.success(`Order request${count > 1 ? 's' : ''} sent!`);
+      setSelected([]);
+      fetchAll();
+    } catch (error) {
+      console.error('Error creating order:', error);
+      toast.error(error.response?.data?.error || 'Failed to create order. Please try again.');
+    } finally {
+      setRequesting(false);
+    }
+  };
 
-    const handleRecommendedItemsRequest = async () => {
-        if (recommendedItems.length === 0) {
-            alert('Please select at least one listing to request.');
-            return;
-        }
+  const hasAnything =
+    recommendedItems.length > 0 || cbfItems.length > 0 || Object.keys(restaurants).length > 0;
 
-        try {
-            console.log('Recommended Items: ', selectedListings);
+  return (
+    <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8 min-h-[70vh] pb-28">
+      <PageHeader
+        title="Discover Food"
+        subtitle="Browse surplus from nearby restaurants and our recommendations, then request a pickup."
+      />
 
-            const listingsData = selectedListings.map((listing) => ({
-                listing: String(listing._id),
-                name: listing.name,
-                quantity: listing.quantity,
-                expiry: listing.expiry,
-                food_type: listing.food_type,
-                restaurant_id: String(listing.restaurant_id),
-                restaurant_name: listing.restaurant_name,
-                view: 'not blocked'
-            }));
-            console.log('Listing Data: ', listingsData);
-
-            const orderData = {
-                restaurantId: String(selectedListings[0].restaurant_id),
-                ngoId: String(user._id),
-                listings: listingsData
-            };
-
-            console.log('Order Data:', orderData);
-
-            const response = await axios.post(`${API_URL}/orders`, orderData);
-
-            if (response.status === 201) {
-                alert('Order requested successfully!');
-                setSelectedListings([]);
-            }
-        } catch (error) {
-            console.error('Error creating order:', error);
-            alert('Failed to create order. Please try again.');
-        }
-    };
-
-    const handleCbfRecommendedItemsRequest = async () => {
-        if (cbfItems.length === 0) {
-            alert('Please select at least one listing to request.');
-            return;
-        }
-
-        try {
-            console.log('Content Based Filtered Items: ', selectedListings);
-
-            const listingsData = selectedListings.map((listing) => ({
-                listing: String(listing._id),
-                name: listing.name,
-                quantity: listing.quantity,
-                expiry: listing.expiry,
-                food_type: listing.food_type,
-                restaurant_id: String(listing.restaurant_id),
-                restaurant_name: listing.restaurant_name,
-                view: 'not blocked'
-            }));
-            console.log('Listing Data: ', listingsData);
-
-            const orderData = {
-                restaurantId: String(selectedListings[0].restaurant_id),
-                ngoId: String(user._id),
-                listings: listingsData
-            };
-
-            console.log('Order Data:', orderData);
-
-            const response = await axios.post(`${API_URL}/orders`, orderData);
-
-            if (response.status === 201) {
-                alert('Order requested successfully!');
-                setSelectedListings([]);
-            }
-        } catch (error) {
-            console.error('Error creating order:', error);
-            alert('Failed to create order. Please try again.');
-        }
-    };
-
-    const handleRequest = async () => {
-
-        if (selectedListings.length === 0) {
-            alert('Please select at least one listing to request.');
-            return;
-        }
-
-        try {
-            console.log('Selected Listings: ', selectedListings);
-
-            const listingsData = selectedListings.map((listing) => ({
-                listing: String(listing.listingId),
-                name: listing.name,
-                quantity: listing.quantity,
-                expiry: listing.expiry,
-                food_type: listing.food_type,
-                restaurant_id: String(listing.restaurantId),
-                restaurant_name: listing.restaurantName,
-                view: 'not blocked'
-            }));
-            console.log(listingsData);
-
-            const orderData = {
-                restaurantId: String(selectedListings[0].restaurantId),
-                ngoId: String(user._id),
-                listings: listingsData
-            };
-
-            console.log('Order Data:', orderData);
-
-            const response = await axios.post(`${API_URL}/orders`, orderData);
-
-            if (response.status === 201) {
-                alert('Order requested successfully!');
-                setSelectedListings([]);
-            }
-        } catch (error) {
-            console.error('Error creating order:', error);
-            alert('Failed to create order. Please try again.');
-        }
-    };
-
-    return (
-        <div className={`container mx-auto p-8 ${isDarkMode ? 'bg-gray-800' : 'bg-gray-200'}`}>
-            <div className='mb-8'>
-                <h2 className={`text-md md:text-xl text-center font-bold border-2 border-gray-800 rounded-lg uppercase mb-4 ${isDarkMode ? 'text-white bg-gray-500' : 'text-black bg-gray-300'}`}>
-                    Recommendations
-                </h2>
-                <div className="flex overflow-x-auto">
-                    {recommendedItems.map((listing, idx) => (
-                        <div key={idx} className="card mr-4 md:min-w-[250px] min-w-[150px]">
-                            <img src={imageUrls[idx % 10]} alt={listing.name} className="object-cover w-full h-32 md:h-48 sm:w-auto sm:max-w-full" />
-                            <h2 className={`text-md md:text-lg font-semibold mt-4 ${isDarkMode ? 'text-gray-200' : 'text-gray-600'}`}>
-                                {listing.name}
-                            </h2>
-                            <div className={`mt-4 p-2 h-12 rounded-sm w-full ${isDarkMode ? 'bg-gray-600 text-gray-200' : 'bg-gray-300 text-gray-600'}`}>
-                                <div className="grid grid-cols-3 gap-4">
-                                    <div className="flex flex-col gap-1">
-                                        <span className={`${isDarkMode ? 'text-gray-300' : 'text-gray-800'} text-xs font-semibold`}>Quantity</span>
-                                        <span className={`${isDarkMode ? 'text-gray-300' : 'text-gray-800'} text-xs font-bold truncate`}>{listing.quantity} kgs</span>
-                                    </div>
-                                    <div className="flex flex-col gap-1">
-                                        <span className={`${isDarkMode ? 'text-gray-300' : 'text-gray-800'} text-xs font-semibold`}>Food Type</span>
-                                        <span className={`${isDarkMode ? 'text-gray-300' : 'text-gray-800'} text-xs font-bold truncate`}>{listing.food_type}</span>
-                                    </div>
-                                    <div className="flex flex-col gap-1">
-                                        <span className={`${isDarkMode ? 'text-gray-300' : 'text-gray-800'} text-xs font-semibold`}>Expiry</span>
-                                        <span className={`${isDarkMode ? 'text-gray-300' : 'text-gray-800'} text-xs font-bold truncate`}>{listing.expiry} hr</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <button
-                                onClick={() => handleSelect(listing)}
-                                className={`mt-4 p-2 text-xs md:text-md ${isDarkMode ? 'bg-blue-700' : 'bg-blue-700'} text-white rounded-md`}
-                            >
-                                {selectedListings.some((item) => item.name === listing.name) ? 'Unselect' : 'Select'}
-                            </button>
-                        </div>
-                    ))}
-                </div>
-                <button onClick={handleRecommendedItemsRequest} className={`mt-4 p-2 text-xs md:text-md bg-blue-700 text-white rounded-md ${isDarkMode ? 'w-14 h-8' : 'w-19 h-10'}`}>
-                    Request
-                </button>
+      {loading ? (
+        <div className="flex gap-4 overflow-hidden">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="shrink-0 w-56">
+              <Skeleton className="h-28 w-full rounded-2xl" />
+              <Skeleton className="mt-3 h-4 w-2/3" />
+              <Skeleton className="mt-2 h-8 w-full" />
             </div>
-            <div className='mb-8'>
-                <h2 className={`text-md md:text-xl text-center font-bold border-2 border-gray-800 rounded-lg uppercase mb-4 ${isDarkMode ? 'text-white bg-gray-500' : 'text-black bg-gray-300'}`}>
-                    Content Based Filtered Items
-                </h2>
-                <div className="flex overflow-x-auto">
-                    {cbfItems.map((listing, idx) => (
-                        <div key={idx} className="card mr-4 md:min-w-[250px] min-w-[150px]">
-                            <img src={imageUrls[idx % 10]} alt={listing.name} className="object-cover w-full h-32 md:h-48 sm:w-auto sm:max-w-full" />
-                            <h2 className={`text-md md:text-lg font-semibold mt-4 ${isDarkMode ? 'text-gray-200' : 'text-gray-600'}`}>
-                                {listing.name}
-                            </h2>
-                            <div className={`mt-4 p-2 h-12 rounded-sm w-full ${isDarkMode ? 'bg-gray-600 text-gray-200' : 'bg-gray-300 text-gray-600'}`}>
-                                <div className="grid grid-cols-3 gap-4">
-                                    <div className="flex flex-col gap-1">
-                                        <span className={`${isDarkMode ? 'text-gray-300' : 'text-gray-800'} text-xs font-semibold`}>Quantity</span>
-                                        <span className={`${isDarkMode ? 'text-gray-300' : 'text-gray-800'} text-xs font-bold truncate`}>{listing.quantity} kgs</span>
-                                    </div>
-                                    <div className="flex flex-col gap-1">
-                                        <span className={`${isDarkMode ? 'text-gray-300' : 'text-gray-800'} text-xs font-semibold`}>Food Type</span>
-                                        <span className={`${isDarkMode ? 'text-gray-300' : 'text-gray-800'} text-xs font-bold truncate`}>{listing.food_type}</span>
-                                    </div>
-                                    <div className="flex flex-col gap-1">
-                                        <span className={`${isDarkMode ? 'text-gray-300' : 'text-gray-800'} text-xs font-semibold`}>Expiry</span>
-                                        <span className={`${isDarkMode ? 'text-gray-300' : 'text-gray-800'} text-xs font-bold truncate`}>{listing.expiry} hr</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <button
-                                onClick={() => handleSelect(listing)}
-                                className={`mt-4 p-2 text-xs md:text-md ${isDarkMode ? 'bg-blue-700' : 'bg-blue-700'} text-white rounded-md`}
-                            >
-                                {selectedListings.some((item) => item.name === listing.name) ? 'Unselect' : 'Select'}
-                            </button>
-                        </div>
-                    ))}
-                </div>
-                <button onClick={handleCbfRecommendedItemsRequest} className={`mt-4 p-2 text-xs md:text-md bg-blue-700 text-white rounded-md ${isDarkMode ? 'w-14 h-8' : 'w-19 h-10'}`}>
-                    Request
-                </button>
-            </div>
-            {Object.keys(restaurants).map((restaurantName, index) => (
-                <div key={index} className="mb-8">
-                    <h2 className={`text-md md:text-xl text-center font-bold border-2 border-gray-800 rounded-lg uppercase mb-4 ${isDarkMode ? 'text-white bg-gray-500' : 'text-black bg-gray-300'}`}>
-                        {restaurantName}
-                    </h2>
-                    <div className="flex overflow-x-auto">
-                        {restaurants[restaurantName].map((listing, idx) => (
-                            <div key={idx} className="card mr-4 md:min-w-[250px] min-w-[150px]">
-                                <img src={imageUrls[index % 10]} alt={listing.name} className="object-cover w-full h-32 md:h-48 sm:w-auto sm:max-w-full" />
-                                <h2 className={`text-md md:text-lg font-semibold mt-4 ${isDarkMode ? 'text-gray-200' : 'text-gray-600'}`}>
-                                    {listing.name}
-                                </h2>
-                                <div className={`mt-4 p-2 h-12 rounded-sm w-full ${isDarkMode ? 'bg-gray-600 text-gray-200' : 'bg-gray-300 text-gray-600'}`}>
-                                    <div className="grid grid-cols-3 gap-4">
-                                        <div className="flex flex-col gap-1">
-                                            <span className={`${isDarkMode ? 'text-gray-300' : 'text-gray-800'} text-xs font-semibold`}>Quantity</span>
-                                            <span className={`${isDarkMode ? 'text-gray-300' : 'text-gray-800'} text-xs font-bold truncate`}>{listing.quantity} kgs</span>
-                                        </div>
-                                        <div className="flex flex-col gap-1">
-                                            <span className={`${isDarkMode ? 'text-gray-300' : 'text-gray-800'} text-xs font-semibold`}>Food Type</span>
-                                            <span className={`${isDarkMode ? 'text-gray-300' : 'text-gray-800'} text-xs font-bold truncate`}>{listing.food_type}</span>
-                                        </div>
-                                        <div className="flex flex-col gap-1">
-                                            <span className={`${isDarkMode ? 'text-gray-300' : 'text-gray-800'} text-xs font-semibold`}>Expiry</span>
-                                            <span className={`${isDarkMode ? 'text-gray-300' : 'text-gray-800'} text-xs font-bold truncate`}>{listing.expiry} hr</span>
-                                        </div>
-                                    </div>
-                                </div>
-                                <button
-                                    onClick={() => handleSelect(listing)}
-                                    className={`mt-4 p-2 text-xs md:text-md ${isDarkMode ? 'bg-blue-700' : 'bg-blue-700'} text-white rounded-md`}
-                                >
-                                    {selectedListings.some((item) => item.name === listing.name) ? 'Unselect' : 'Select'}
-                                </button>
-                            </div>
-                        ))}
-                    </div>
-                    <button onClick={handleRequest} className={`mt-4 p-2 text-xs md:text-md bg-blue-700 text-white rounded-md ${isDarkMode ? 'w-14 h-8' : 'w-19 h-10'}`}>
-                        Request
-                    </button>
-                </div>
-            ))}
+          ))}
         </div>
-    );
+      ) : !hasAnything ? (
+        <EmptyState
+          icon="🔍"
+          title="No listings nearby yet"
+          description="There's no surplus food available around you right now. Check back soon — new listings appear here."
+        />
+      ) : (
+        <>
+          <Rail
+            title="Recommended for you"
+            icon={<FiStar size={16} />}
+            items={recommendedItems}
+            isSelected={isSelected}
+            onToggle={toggle}
+          />
+          <Rail
+            title="Similar to your past orders"
+            icon={<FiShoppingBag size={16} />}
+            items={cbfItems}
+            isSelected={isSelected}
+            onToggle={toggle}
+          />
+          {Object.keys(restaurants).map((name) => (
+            <Rail
+              key={name}
+              title={name}
+              icon={<FiMapPin size={16} />}
+              items={restaurants[name]}
+              isSelected={isSelected}
+              onToggle={toggle}
+            />
+          ))}
+        </>
+      )}
 
-
+      {/* Sticky request bar */}
+      {selected.length > 0 && (
+        <div className="fixed bottom-0 inset-x-0 z-40 border-t border-stone-200 dark:border-stone-800 bg-white/90 dark:bg-stone-950/90 backdrop-blur-lg animate-fade-in-up">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 py-3 flex items-center justify-between">
+            <p className="text-sm font-medium text-stone-700 dark:text-stone-200">
+              {selected.length} item{selected.length > 1 ? 's' : ''} selected
+            </p>
+            <div className="flex gap-2">
+              <Button variant="ghost" onClick={() => setSelected([])}>
+                Clear
+              </Button>
+              <Button loading={requesting} onClick={handleRequest}>
+                <FiShoppingBag /> Request pickup
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 };
 
 export default NGOListingsPage;

@@ -7,8 +7,9 @@ eventlet.monkey_patch()
 
 from flask import Flask, jsonify, request
 from flask_mongoengine import MongoEngine
-from flask_socketio import SocketIO, join_room, emit, disconnect
+from flask_socketio import join_room, emit, disconnect
 from flask_cors import CORS
+from socket_instance import socketio
 from datetime import datetime
 import json
 from bson import ObjectId
@@ -46,8 +47,9 @@ db.init_app(app)
 # e.g. CLIENT_ORIGIN=https://your-app.vercel.app
 client_origins = [o.strip() for o in os.getenv('CLIENT_ORIGIN', 'http://localhost:5173').split(',')]
 
-# Initialize SocketIO
-socketio = SocketIO(app, cors_allowed_origins=client_origins)
+# Initialize SocketIO (instance lives in socket_instance.py so controllers can
+# emit without importing app.py — see that module for the rationale).
+socketio.init_app(app, cors_allowed_origins=client_origins)
 
 # Enable CORS
 CORS(app, resources={r"/*": {"origins": client_origins}}, supports_credentials=True)
@@ -125,6 +127,9 @@ def handle_connect(auth=None):
         print('Rejected unauthenticated socket connection')
         return False  # refuse the connection
     sid_to_user[request.sid] = user_id
+    # Join a personal room keyed by the user id so order routes can push
+    # real-time 'order_update' events to just this user (see order_controller).
+    join_room(user_id)
     print(f'User {user_id} connected!')
 
 

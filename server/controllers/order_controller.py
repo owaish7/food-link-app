@@ -10,6 +10,34 @@ from models.user import User
 from models.chat import Chat
 from utils.sentiment_analysis import analyze_sentiment
 from utils.auth_middleware import owns, is_order_party, current_user_id
+from socket_instance import socketio
+
+
+def _attach_party_names(order, order_dict):
+    """Enrich a serialized order with human-readable party names so the
+    Transactions UI can show who's who (the raw document only has ObjectIds)."""
+    try:
+        order_dict['restaurant_name'] = order.restaurant_id.username
+    except Exception:
+        order_dict['restaurant_name'] = ''
+    try:
+        order_dict['ngo_name'] = order.ngo_id.username
+    except Exception:
+        order_dict['ngo_name'] = ''
+    return order_dict
+
+
+def _emit_order_update(restaurant_id, ngo_id, order_id, status):
+    """Push a real-time 'order_update' to both parties' personal rooms so their
+    open Transactions/Chat pages refetch without a manual refresh. Best-effort:
+    a socket failure must never break the HTTP request."""
+    try:
+        payload = {"orderId": str(order_id), "status": status}
+        socketio.emit('order_update', payload, to=str(restaurant_id))
+        socketio.emit('order_update', payload, to=str(ngo_id))
+    except Exception as e:
+        print(f"order_update emit failed: {e}")
+
 
 def create_order():
     data = request.json
@@ -56,7 +84,10 @@ def create_order():
 
         # Save the new order
         new_order.save()
-        
+
+        # Notify the restaurant (and the requesting NGO) in real time.
+        _emit_order_update(restaurant_id, ngo_id, new_order.id, new_order.status)
+
          # Fetch the saved order to verify
         saved_order = Order.objects.get(id=new_order.id)
         print("\n--- Saved Order Details ---")
@@ -100,6 +131,7 @@ def get_orders_by_restaurant():
         for order in orders:
             # Convert the order document to a dictionary and serialize it
             order_dict = serialize_doc(order.to_mongo().to_dict())
+            _attach_party_names(order, order_dict)
             response_data.append(order_dict)
 
             # Print the details of each fetched order
@@ -138,6 +170,7 @@ def get_orders_by_ngo():
         for order in orders:
             # Convert the order document to a dictionary and serialize it
             order_dict = serialize_doc(order.to_mongo().to_dict())
+            _attach_party_names(order, order_dict)
             response_data.append(order_dict)
 
             # Print the details of each fetched order
@@ -194,6 +227,7 @@ def decline_order(order_id):
         if not owns(order.restaurant_id):
             return jsonify({"status": "failure", "error": "Forbidden"}), 403
         order.update(set__status='declined')
+        _emit_order_update(order.restaurant_id.id, order.ngo_id.id, order.id, 'declined')
         return jsonify({
             "status": "success",
             "data": serialize_doc(order.to_mongo().to_dict())
@@ -243,6 +277,7 @@ def accept_order(order_id):
 
         # Update the order's status and codes
         order.update(set__status='accepted', set__ngo_code=ngo_code, set__rest_code=rest_code)
+        _emit_order_update(order.restaurant_id.id, order.ngo_id.id, order.id, 'accepted')
 
         # Block the view of each listing in the order
         for listing_detail in order.listings:
@@ -328,6 +363,7 @@ def cancel_order(order_id):
 
         # Update the order status to "cancelled"
         order.update(set__status='cancelled')
+        _emit_order_update(order.restaurant_id.id, order.ngo_id.id, order.id, 'cancelled')
 
         # Return success response
         return jsonify({"message": "Order cancelled successfully"}), 200
@@ -377,6 +413,7 @@ def fulfill_order(order_id):
 
         # Update the order's status to 'fulfilled'
         order.update(set__status='fulfilled')
+        _emit_order_update(order.restaurant_id.id, order.ngo_id.id, order.id, 'fulfilled')
 
         # Return success response
         return jsonify({"message": "Order fulfilled successfully"}), 200

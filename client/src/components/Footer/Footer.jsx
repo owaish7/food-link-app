@@ -1,141 +1,68 @@
 import React from "react";
-import { useDarkMode } from "../../context/DarkModeContext";
+import { Link } from "react-router-dom";
+import { FiGithub, FiHeart } from "react-icons/fi";
 
 export default function Footer() {
-  
-  const { isDarkMode } = useDarkMode();
+  const year = new Date().getFullYear();
 
   return (
-    <footer className={`relative bg-gray-300 pt-8 pb-6`}>
-      <div
-        className="bottom-auto top-0 left-0 right-0 w-full absolute pointer-events-none overflow-hidden -mt-20"
-        style={{ height: "80px" }}
-      >
-        <svg
-          className="absolute bottom-0 overflow-hidden"
-          xmlns="http://www.w3.org/2000/svg"
-          preserveAspectRatio="none"
-          version="1.1"
-          viewBox="0 0 2560 100"
-          x="0"
-          y="0"
-        >
-          <polygon
-            className="text-gray-300 fill-current"
-            points="2560 0 2560 100 0 100"
-          ></polygon>
-        </svg>
-      </div>
-      <div className="container mx-auto px-4">
-        <div className="flex flex-wrap">
-          <div className="w-full lg:w-6/12 px-4">
-            <h4 className="text-3xl font-semibold">
-              Food Link
-            </h4>
-            <h5 className="text-lg mt-0 mb-2 text-gray-700">
-              Empowering communities through food: Join us in our mission to fight hunger, one meal at a time.
-            </h5>
-            <div className="mt-6">
-              <button
-                className="bg-white text-blue-400 shadow-lg font-normal h-10 w-10 items-center justify-center align-center rounded-full outline-none focus:outline-none mr-2 p-3"
-                type="button"
-              >
-                <i className="flex fab fa-twitter"></i>
-              </button>
-              <button
-                className="bg-white text-blue-600 shadow-lg font-normal h-10 w-10 items-center justify-center align-center rounded-full outline-none focus:outline-none mr-2 p-3"
-                type="button"
-              >
-                <i className="flex fab fa-facebook-square"></i>
-              </button>
-              <button
-                className="bg-white text-pink-400 shadow-lg font-normal h-10 w-10 items-center justify-center align-center rounded-full outline-none focus:outline-none mr-2 p-3"
-                type="button"
-              >
-                <i className="flex fab fa-dribbble"></i>
-              </button>
-              <button
-                className="bg-white text-gray-900 shadow-lg font-normal h-10 w-10 items-center justify-center align-center rounded-full outline-none focus:outline-none mr-2 p-3"
-                type="button"
-              >
-                <i className="flex fab fa-github"></i>
-              </button>
+    <footer className="mt-16 border-t border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-950">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 py-12">
+        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-10">
+          <div className="max-w-sm">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-lg">
+                🍽️
+              </span>
+              <span className="font-display text-xl font-extrabold tracking-tight text-stone-900 dark:text-white">
+                Food<span className="text-brand-600 dark:text-brand-400">Link</span>
+              </span>
             </div>
+            <p className="mt-4 text-sm leading-relaxed text-stone-500 dark:text-stone-400">
+              Connecting restaurants with surplus food to nearby NGOs — reducing waste and feeding
+              communities, one pickup at a time.
+            </p>
           </div>
-          <div className="w-full lg:w-6/12 px-4 hidden md:block">
-            <div className="flex flex-wrap items-top mb-6">
-              <div className="w-full lg:w-4/12 px-4 ml-auto">
-                <span className="block uppercase text-gray-600 text-sm font-semibold mb-2">
-                  Useful Links
-                </span>
-                <ul className="list-unstyled">
-                  <li>
-                    <a className="text-gray-700 hover:text-gray-900 font-semibold block pb-2 text-sm"
-                      href="https://www.creative-tim.com/presentation">About Us
-                    </a>
-                  </li>
-                  <li>
-                    <a className="text-gray-700 hover:text-gray-900 font-semibold block pb-2 text-sm"
-                      href="https://blog.creative-tim.com">Blog
-                    </a>
-                  </li>
-                  <li>
-                    <a className="text-gray-700 hover:text-gray-900 font-semibold block pb-2 text-sm"
-                      href="https://github.com/ojasvatomar47/Food-Link" target="_blank">Github
-                    </a>
-                  </li>
-                  <li>
-                    <a className="text-gray-700 hover:text-gray-900 font-semibold block pb-2 text-sm"
-                      href="https://www.creative-tim.com/bootstrap-themes/free">Free Products
-                    </a>
-                  </li>
 
-                </ul>
-              </div>
-              <div className="w-full lg:w-4/12 px-4">
-                <span className="block uppercase text-gray-600 text-sm font-semibold mb-2">
-                  Other Resources
-                </span>
-                <ul className="list-unstyled">
-                  <li>
-                    <a className="text-gray-700 hover:text-gray-900 font-semibold block pb-2 text-sm"
-                      href="https://github.com/creativetimofficial/argon-design-system/blob/master/LICENSE.md">MIT License
-                    </a>
-                  </li>
-                  <li>
-                    <a className="text-gray-700 hover:text-gray-900 font-semibold block pb-2 text-sm"
-                      href="https://creative-tim.com/terms">Terms & Conditions
-                    </a>
-                  </li>
-                  <li>
-                    <a className="text-gray-700 hover:text-gray-900 font-semibold block pb-2 text-sm"
-                      href="https://creative-tim.com/privacy">Privacy Policy
-                    </a>
-                  </li>
-                  <li>
-                    <a className="text-gray-700 hover:text-gray-900 font-semibold block pb-2 text-sm"
-                      href="https://creative-tim.com/contact-us">Contact Us
-                    </a>
-                  </li>
-                </ul>
-
-              </div>
+          <div className="grid grid-cols-2 gap-10 sm:gap-16">
+            <div>
+              <h4 className="text-sm font-semibold text-stone-900 dark:text-white">Explore</h4>
+              <ul className="mt-3 space-y-2 text-sm">
+                <li>
+                  <Link to="/" className="text-stone-500 dark:text-stone-400 hover:text-brand-600 dark:hover:text-brand-400">
+                    Home
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/about" className="text-stone-500 dark:text-stone-400 hover:text-brand-600 dark:hover:text-brand-400">
+                    About
+                  </Link>
+                </li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-sm font-semibold text-stone-900 dark:text-white">Connect</h4>
+              <ul className="mt-3 space-y-2 text-sm">
+                <li>
+                  <a
+                    href="https://github.com/owaish7/food-link-app"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 text-stone-500 dark:text-stone-400 hover:text-brand-600 dark:hover:text-brand-400"
+                  >
+                    <FiGithub size={15} /> GitHub
+                  </a>
+                </li>
+              </ul>
             </div>
           </div>
         </div>
-        <hr className="my-6 border-gray-400" />
-        <div className="flex flex-wrap items-center md:justify-between justify-center">
-          <div className="w-full md:w-4/12 px-4 mx-auto text-center">
-            <div className="text-sm text-gray-600 font-semibold py-1">
-              Copyright © {new Date().getFullYear()}{" "}Food-Link By{" "}
-              <a
-                href="https://www.creative-tim.com"
-                className="text-gray-600 hover:text-gray-900"
-              >
-                SQL Lovers 💕
-              </a>.
-            </div>
-          </div>
+
+        <div className="mt-10 border-t border-stone-200 dark:border-stone-800 pt-6 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <p className="text-sm text-stone-400 dark:text-stone-500">© {year} FoodLink. All rights reserved.</p>
+          <p className="flex items-center gap-1.5 text-sm text-stone-400 dark:text-stone-500">
+            Built with <FiHeart size={13} className="text-red-500" /> to fight food waste
+          </p>
         </div>
       </div>
     </footer>

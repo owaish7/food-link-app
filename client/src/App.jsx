@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { Suspense, lazy } from 'react'
 import {
   createBrowserRouter,
   RouterProvider,
@@ -9,126 +9,76 @@ import {
 // Components
 import Navbar from './components/Navbar/Navbar';
 import Footer from './components/Footer/Footer';
-
-// Dashboard
-import HomePage from './pages/HomePage/HomePage';
-
-// Authentication Pages
-import SignUpPage from './pages/AuthenticationPages/SignUpPage/SignUpPage';
-import SignInPage from './pages/AuthenticationPages/SignInPage/SignInPage';
-
-// Restaurant Pages
-import RestaurantListingsPage from './pages/RestaurantPages/RestaurantListingsPage';
-import RestaurantTransactionsPage from './pages/RestaurantPages/RestaurantTransactionsPage';
-import RestaurantProfilePage from './pages/RestaurantPages/RestaurantProfilePage'
-
-// NGO Pages
-import NGOListingsPage from './pages/NGOPages/NGOListingsPage';
-import NGOTransactionsPage from './pages/NGOPages/NGOTransactionsPage';
-import NGOProfilePage from './pages/NGOPages/NGOProfilePage'
-
-// Chat-Interface
-import ChatRoomPage from './pages/ChatInterfacePages/ChatRoomPage/ChatRoomPage';
-
-// Other Pages
-import AboutPage from './pages/AboutPage/AboutPage';
+import Spinner from './components/ui/Spinner';
 
 // Context
 import { DarkModeProvider } from './context/DarkModeContext';
 
-// Error Pages
-import NotFoundPage from './pages/ErrorPages/NotFoundPage/NotFoundPage';
-import InternalServerErrorPage from './pages/ErrorPages/InternalServerErrorPage/InternalServerErrorPage';
+// Pages (lazy-loaded so each route ships its own chunk instead of one big bundle)
+const HomePage = lazy(() => import('./pages/HomePage/HomePage'));
+const SignUpPage = lazy(() => import('./pages/AuthenticationPages/SignUpPage/SignUpPage'));
+const SignInPage = lazy(() => import('./pages/AuthenticationPages/SignInPage/SignInPage'));
+const RestaurantListingsPage = lazy(() => import('./pages/RestaurantPages/RestaurantListingsPage'));
+const RestaurantTransactionsPage = lazy(() => import('./pages/RestaurantPages/RestaurantTransactionsPage'));
+const RestaurantProfilePage = lazy(() => import('./pages/RestaurantPages/RestaurantProfilePage'));
+const NGOListingsPage = lazy(() => import('./pages/NGOPages/NGOListingsPage'));
+const NGOTransactionsPage = lazy(() => import('./pages/NGOPages/NGOTransactionsPage'));
+const NGOProfilePage = lazy(() => import('./pages/NGOPages/NGOProfilePage'));
+const ChatRoomPage = lazy(() => import('./pages/ChatInterfacePages/ChatRoomPage/ChatRoomPage'));
+const AboutPage = lazy(() => import('./pages/AboutPage/AboutPage'));
+const NotFoundPage = lazy(() => import('./pages/ErrorPages/NotFoundPage/NotFoundPage'));
 
-const Layout = () => {
+const PageLoader = () => (
+  <div className="flex min-h-screen w-full items-center justify-center bg-stone-50 dark:bg-stone-950 text-brand-600">
+    <Spinner size={40} />
+  </div>
+);
 
-  return (
-    <>
-      <Navbar transparent />
-      <Outlet />
-      <Footer />
-    </>
-  )
-
-};
+// Wrap a lazy element in Suspense; optionally behind the private-route guard.
+const withSuspense = (el) => <Suspense fallback={<PageLoader />}>{el}</Suspense>;
 
 const PrivateRoute = ({ children }) => {
   if (!localStorage.getItem('user')) {
     return <Navigate to="/sign-in" />;
   }
-
   return children;
 };
+
+const priv = (el) => <PrivateRoute>{withSuspense(el)}</PrivateRoute>;
+
+const Layout = () => (
+  <>
+    <Navbar transparent />
+    <Outlet />
+    <Footer />
+  </>
+);
 
 const router = createBrowserRouter([
   {
     path: "/",
     element: <Layout />,
     children: [
-      {
-        path: "/",
-        element: <PrivateRoute><HomePage /></PrivateRoute>,
-      },
-      {
-        path: "/restaurant/listings",
-        element: <PrivateRoute><RestaurantListingsPage /></PrivateRoute>,
-      },
-      {
-        path: "/restaurant/transactions",
-        element: <PrivateRoute><RestaurantTransactionsPage /></PrivateRoute>,
-      },
-      {
-        path: "/restaurant/profile",
-        element: <PrivateRoute><RestaurantProfilePage /></PrivateRoute>,
-      },
-      {
-        path: "/ngo/listings",
-        element: <PrivateRoute><NGOListingsPage /></PrivateRoute>,
-      },
-      {
-        path: "/ngo/transactions",
-        element: <PrivateRoute><NGOTransactionsPage /></PrivateRoute>,
-      },
-      {
-        path: "/ngo/profile/",
-        element: <PrivateRoute><NGOProfilePage /></PrivateRoute>,
-      },
-      {
-        path: "/about",
-        element: <AboutPage />,
-      },
+      { path: "/", element: priv(<HomePage />) },
+      { path: "/restaurant/listings", element: priv(<RestaurantListingsPage />) },
+      { path: "/restaurant/transactions", element: priv(<RestaurantTransactionsPage />) },
+      { path: "/restaurant/profile", element: priv(<RestaurantProfilePage />) },
+      { path: "/ngo/listings", element: priv(<NGOListingsPage />) },
+      { path: "/ngo/transactions", element: priv(<NGOTransactionsPage />) },
+      { path: "/ngo/profile/", element: priv(<NGOProfilePage />) },
+      { path: "/about", element: withSuspense(<AboutPage />) },
     ]
   },
-  {
-    path: "/sign-up",
-    element: <SignUpPage />
-  },
-  {
-    path: "/sign-in",
-    element: <SignInPage />
-  },
-  {
-    path: "/chat/:orderId",
-    element: <ChatRoomPage />
-  },
-  {
-    path: "/error/notfound",
-    element: <NotFoundPage />,
-  },
-  {
-    path: "/error/internalserver",
-    element: <InternalServerErrorPage />,
-  },
+  { path: "/sign-up", element: withSuspense(<SignUpPage />) },
+  { path: "/sign-in", element: withSuspense(<SignInPage />) },
+  { path: "/chat/:orderId", element: withSuspense(<ChatRoomPage />) },
+  { path: "*", element: withSuspense(<NotFoundPage />) },
 ]);
 
-
 const App = () => {
-
   return (
     <DarkModeProvider>
-      <div className=''>
-        <RouterProvider router={router} />
-      </div>
+      <RouterProvider router={router} />
     </DarkModeProvider>
   )
 }
