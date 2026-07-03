@@ -132,3 +132,5 @@ print("\n===== SUMMARY =====")
 passed = sum(1 for _,c,_ in results if c); print(f"{passed}/{len(results)} passed")
 for n,c,d in results:
     if not c: print("FAILED:", n)
+
+sys.exit(0 if passed == len(results) else 1)
