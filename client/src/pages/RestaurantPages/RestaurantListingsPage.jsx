@@ -6,6 +6,7 @@ import { useToast } from '../../context/ToastContext';
 import { useOrderUpdates } from '../../context/SocketContext';
 import { API_URL } from '../../config';
 import { foodImage } from '../../lib/foodImages';
+import { readCache, writeCache } from '../../lib/dataCache';
 import PageHeader from '../../components/ui/PageHeader';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
@@ -58,8 +59,9 @@ const RestaurantListingsPage = () => {
   const restaurantId = user?._id;
   const toast = useToast();
 
-  const [listings, setListings] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const cacheKey = `rest-listings:${restaurantId}`;
+  const [listings, setListings] = useState(() => readCache(cacheKey) || []);
+  const [loading, setLoading] = useState(() => !readCache(cacheKey));
 
   const [showAdd, setShowAdd] = useState(false);
   const [addForm, setAddForm] = useState(emptyForm);
@@ -75,14 +77,16 @@ const RestaurantListingsPage = () => {
     if (!restaurantId) return;
     try {
       const response = await axios.get(`${API_URL}/listings/${restaurantId}`);
-      setListings(Array.isArray(response.data) ? response.data : []);
+      const data = Array.isArray(response.data) ? response.data : [];
+      setListings(data);
+      writeCache(cacheKey, data);
     } catch (error) {
       console.error('Error fetching listings:', error);
       toast.error('Failed to load listings.');
     } finally {
       setLoading(false);
     }
-  }, [restaurantId, toast]);
+  }, [restaurantId, toast, cacheKey]);
 
   useEffect(() => {
     fetchListings();

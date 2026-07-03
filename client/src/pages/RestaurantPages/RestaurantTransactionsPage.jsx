@@ -9,6 +9,7 @@ import { useToast } from '../../context/ToastContext';
 import { useOrderUpdates } from '../../context/SocketContext';
 import { API_URL } from '../../config';
 import { foodImage } from '../../lib/foodImages';
+import { readCache, writeCache } from '../../lib/dataCache';
 import PageHeader from '../../components/ui/PageHeader';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
@@ -29,8 +30,9 @@ const RestaurantTransactionsPage = () => {
   const { user } = useAuth();
   const toast = useToast();
 
-  const [orders, setOrders] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const cacheKey = `rest-orders:${user?._id}`;
+  const [orders, setOrders] = useState(() => readCache(cacheKey) || []);
+  const [loading, setLoading] = useState(() => !readCache(cacheKey));
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [actingId, setActingId] = useState(null);
 
@@ -56,13 +58,15 @@ const RestaurantTransactionsPage = () => {
       const response = await axios.get(`${API_URL}/orders/restaurant`, {
         params: { restaurant_id: user._id },
       });
-      setOrders(response.data.data || []);
+      const data = response.data.data || [];
+      setOrders(data);
+      writeCache(cacheKey, data);
     } catch (error) {
       console.error('Error fetching orders:', error);
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, cacheKey]);
 
   useEffect(() => {
     fetchOrders();

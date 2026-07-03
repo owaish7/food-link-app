@@ -7,6 +7,7 @@ import { useToast } from '../../context/ToastContext';
 import { useOrderUpdates } from '../../context/SocketContext';
 import { API_URL } from '../../config';
 import { foodImage } from '../../lib/foodImages';
+import { readCache, writeCache } from '../../lib/dataCache';
 import PageHeader from '../../components/ui/PageHeader';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
@@ -25,8 +26,9 @@ const NGOTransactionsPage = () => {
   const { user } = useAuth();
   const toast = useToast();
 
-  const [orders, setOrders] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const cacheKey = `ngo-orders:${user?._id}`;
+  const [orders, setOrders] = useState(() => readCache(cacheKey) || []);
+  const [loading, setLoading] = useState(() => !readCache(cacheKey));
   const [selectedOrder, setSelectedOrder] = useState(null);
 
   const [showListings, setShowListings] = useState(false);
@@ -44,13 +46,15 @@ const NGOTransactionsPage = () => {
     if (!user?._id) return;
     try {
       const response = await axios.get(`${API_URL}/orders/ngo`, { params: { ngo_id: user._id } });
-      setOrders(response.data.data || []);
+      const data = response.data.data || [];
+      setOrders(data);
+      writeCache(cacheKey, data);
     } catch (error) {
       console.error('Error fetching orders:', error);
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, cacheKey]);
 
   useEffect(() => {
     fetchOrders();

@@ -6,6 +6,7 @@ import { useToast } from '../../context/ToastContext';
 import { useOrderUpdates } from '../../context/SocketContext';
 import { API_URL } from '../../config';
 import { foodImage } from '../../lib/foodImages';
+import { readCache, writeCache } from '../../lib/dataCache';
 import PageHeader from '../../components/ui/PageHeader';
 import Button from '../../components/ui/Button';
 import Skeleton from '../../components/ui/Skeleton';
@@ -91,11 +92,13 @@ const NGOListingsPage = () => {
   const { user } = useAuth();
   const toast = useToast();
 
-  const [restaurants, setRestaurants] = useState({});
-  const [recommendedItems, setRecommendedItems] = useState([]);
-  const [cbfItems, setCbfItems] = useState([]);
+  const cacheKey = `ngo-listings:${user?._id}`;
+  const cached = readCache(cacheKey);
+  const [restaurants, setRestaurants] = useState(() => cached?.restaurants || {});
+  const [recommendedItems, setRecommendedItems] = useState(() => cached?.recommendedItems || []);
+  const [cbfItems, setCbfItems] = useState(() => cached?.cbfItems || []);
   const [selected, setSelected] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !cached);
   const [requesting, setRequesting] = useState(false);
 
   const fetchAll = useCallback(async () => {
@@ -108,26 +111,36 @@ const NGOListingsPage = () => {
         axios.get(`${API_URL}/content-based-recommendations`, { params: { ngo_id: ngoId } }),
       ]);
 
+      const next = {
+        restaurants: cached?.restaurants || {},
+        recommendedItems: cached?.recommendedItems || [],
+        cbfItems: cached?.cbfItems || [],
+      };
       if (nearby.status === 'fulfilled') {
         const grouped = {};
         (nearby.value.data || []).forEach((listing) => {
           const key = listing.restaurantName || 'Restaurant';
           (grouped[key] = grouped[key] || []).push(listing);
         });
-        setRestaurants(grouped);
+        next.restaurants = grouped;
       }
       if (recs.status === 'fulfilled') {
-        setRecommendedItems(Array.isArray(recs.value.data) ? recs.value.data : []);
+        next.recommendedItems = Array.isArray(recs.value.data) ? recs.value.data : [];
       }
       if (cbf.status === 'fulfilled') {
-        setCbfItems(cbf.value.data?.recommendations || []);
+        next.cbfItems = cbf.value.data?.recommendations || [];
       }
+      setRestaurants(next.restaurants);
+      setRecommendedItems(next.recommendedItems);
+      setCbfItems(next.cbfItems);
+      writeCache(cacheKey, next);
     } catch (error) {
       console.error('Error fetching listings:', error);
     } finally {
       setLoading(false);
     }
-  }, [user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, cacheKey]);
 
   useEffect(() => {
     fetchAll();

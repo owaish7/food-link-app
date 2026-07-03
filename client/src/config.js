@@ -21,8 +21,10 @@ let wakeTimer = null;
 
 const onStart = () => {
   inflight += 1;
+  // Only surface the "waking up" hint for genuinely long waits (cold start),
+  // not the normal 1–3s a warm free-tier request can take.
   if (inflight === 1 && !wakeTimer) {
-    wakeTimer = setTimeout(() => serverStatus.setWaking(true), 3000);
+    wakeTimer = setTimeout(() => serverStatus.setWaking(true), 8000);
   }
 };
 
