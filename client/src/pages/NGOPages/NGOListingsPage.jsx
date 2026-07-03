@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
-import { FiCheck, FiPlus, FiClock, FiPackage, FiShoppingBag, FiStar, FiMapPin } from 'react-icons/fi';
+import { FiCheck, FiPlus, FiClock, FiPackage, FiShoppingBag, FiStar, FiMapPin, FiSearch, FiX } from 'react-icons/fi';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { useOrderUpdates } from '../../context/SocketContext';
@@ -12,7 +12,10 @@ import Button from '../../components/ui/Button';
 import Skeleton from '../../components/ui/Skeleton';
 import EmptyState from '../../components/ui/EmptyState';
 import { Badge } from '../../components/ui/Badge';
+import { Input } from '../../components/ui/Input';
 import { cn } from '../../lib/cn';
+
+const FOOD_TYPES = ['all', 'Vegetarian', 'Non-Vegetarian', 'Vegan'];
 
 const idOf = (l) => String(l._id || l.listingId || '');
 const ridOf = (l) => String(l.restaurant_id || l.restaurantId || '');
@@ -22,7 +25,7 @@ function NgoCard({ listing, selected, onToggle }) {
   return (
     <div
       className={cn(
-        'shrink-0 w-56 rounded-2xl border bg-white dark:bg-stone-900 shadow-card overflow-hidden transition-all',
+        'w-full rounded-2xl border bg-white dark:bg-stone-900 shadow-card overflow-hidden transition-all',
         selected
           ? 'border-brand-500 ring-2 ring-brand-500/30'
           : 'border-stone-200/80 dark:border-stone-800'
@@ -81,7 +84,9 @@ function Rail({ title, icon, items, isSelected, onToggle }) {
       </div>
       <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2">
         {items.map((l) => (
-          <NgoCard key={idOf(l) || l.name} listing={l} selected={isSelected(l)} onToggle={() => onToggle(l)} />
+          <div key={idOf(l) || l.name} className="shrink-0 w-56">
+            <NgoCard listing={l} selected={isSelected(l)} onToggle={() => onToggle(l)} />
+          </div>
         ))}
       </div>
     </section>
@@ -148,6 +153,9 @@ const NGOListingsPage = () => {
 
   useOrderUpdates(fetchAll);
 
+  const [query, setQuery] = useState('');
+  const [foodFilter, setFoodFilter] = useState('all');
+
   const isSelected = (l) => selected.some((s) => idOf(s) === idOf(l));
   const toggle = (l) =>
     setSelected((prev) => (isSelected(l) ? prev.filter((s) => idOf(s) !== idOf(l)) : [...prev, l]));
@@ -199,12 +207,71 @@ const NGOListingsPage = () => {
   const hasAnything =
     recommendedItems.length > 0 || cbfItems.length > 0 || Object.keys(restaurants).length > 0;
 
+  // Search/filter works across every source (recommendations + nearby), deduped.
+  const isFiltering = query.trim() !== '' || foodFilter !== 'all';
+  const allListings = (() => {
+    const pool = [...recommendedItems, ...cbfItems, ...Object.values(restaurants).flat()];
+    const seen = new Set();
+    return pool.filter((l) => {
+      const id = idOf(l) || l.name;
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+  })();
+  const q = query.trim().toLowerCase();
+  const filtered = allListings.filter(
+    (l) =>
+      (foodFilter === 'all' || l.food_type === foodFilter) &&
+      (q === '' || (l.name || '').toLowerCase().includes(q) || rnameOf(l).toLowerCase().includes(q))
+  );
+
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8 min-h-[70vh] pb-28">
       <PageHeader
         title="Discover Food"
         subtitle="Browse surplus from nearby restaurants and our recommendations, then request a pickup."
       />
+
+      {/* Search + filter */}
+      {!loading && hasAnything && (
+        <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="relative flex-1">
+            <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" size={16} />
+            <Input
+              className="pl-10 pr-9"
+              placeholder="Search food or restaurant…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            {query && (
+              <button
+                onClick={() => setQuery('')}
+                aria-label="Clear search"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 dark:hover:text-stone-200"
+              >
+                <FiX size={16} />
+              </button>
+            )}
+          </div>
+          <div className="flex gap-2 overflow-x-auto no-scrollbar">
+            {FOOD_TYPES.map((t) => (
+              <button
+                key={t}
+                onClick={() => setFoodFilter(t)}
+                className={cn(
+                  'shrink-0 rounded-full px-3.5 py-2 text-sm font-semibold transition-colors',
+                  foodFilter === t
+                    ? 'bg-brand-600 text-white'
+                    : 'bg-white dark:bg-stone-800 text-stone-600 dark:text-stone-300 border border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-700'
+                )}
+              >
+                {t === 'all' ? 'All' : t}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex gap-4 overflow-hidden">
@@ -222,6 +289,30 @@ const NGOListingsPage = () => {
           title="No listings nearby yet"
           description="There's no surplus food available around you right now. Check back soon — new listings appear here."
         />
+      ) : isFiltering ? (
+        filtered.length > 0 ? (
+          <section>
+            <h2 className="mb-4 font-display text-lg font-bold text-stone-900 dark:text-white">
+              {filtered.length} result{filtered.length > 1 ? 's' : ''}
+            </h2>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+              {filtered.map((l) => (
+                <NgoCard key={idOf(l) || l.name} listing={l} selected={isSelected(l)} onToggle={() => toggle(l)} />
+              ))}
+            </div>
+          </section>
+        ) : (
+          <EmptyState
+            icon="🔍"
+            title="No matches"
+            description="No listings match your search. Try a different term or filter."
+            action={
+              <Button variant="secondary" onClick={() => { setQuery(''); setFoodFilter('all'); }}>
+                Clear filters
+              </Button>
+            }
+          />
+        )
       ) : (
         <>
           <Rail
