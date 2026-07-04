@@ -59,7 +59,7 @@ const router = createBrowserRouter([
     path: "/",
     element: <Layout />,
     children: [
-      { path: "/", element: priv(<HomePage />) },
+      { path: "/", element: withSuspense(<HomePage />) },
       { path: "/restaurant/listings", element: priv(<RestaurantListingsPage />) },
       { path: "/restaurant/transactions", element: priv(<RestaurantTransactionsPage />) },
       { path: "/restaurant/profile", element: priv(<RestaurantProfilePage />) },

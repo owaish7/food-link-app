@@ -15,12 +15,14 @@ export default function Navbar() {
 
   const type = user?.userType === "Restaurant" ? "restaurant" : "ngo";
 
-  const links = [
-    { to: `/${type}/listings`, label: "Listings" },
-    { to: `/${type}/transactions`, label: "Transactions" },
-    { to: `/${type}/profile`, label: "Profile" },
-    { to: "/about", label: "About" },
-  ];
+  const links = user
+    ? [
+        { to: `/${type}/listings`, label: "Listings" },
+        { to: `/${type}/transactions`, label: "Transactions" },
+        { to: `/${type}/profile`, label: "Profile" },
+        { to: "/about", label: "About" },
+      ]
+    : [{ to: "/about", label: "About" }];
 
   const isActive = (to) => location.pathname === to || location.pathname.startsWith(to + "/");
 
@@ -71,7 +73,7 @@ export default function Navbar() {
               {isDarkMode ? <FiSun size={18} /> : <FiMoon size={18} />}
             </button>
 
-            {user && (
+            {user ? (
               <div className="hidden sm:flex items-center gap-2 pl-1">
                 <Avatar name={user.username || "User"} size={32} />
                 <button
@@ -80,6 +82,21 @@ export default function Navbar() {
                 >
                   <FiLogOut size={16} /> Sign out
                 </button>
+              </div>
+            ) : (
+              <div className="hidden sm:flex items-center gap-2 pl-1">
+                <Link
+                  to="/sign-in"
+                  className="rounded-lg px-3 py-2 text-sm font-semibold text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+                >
+                  Sign in
+                </Link>
+                <Link
+                  to="/sign-up"
+                  className="rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 px-3.5 py-2 text-sm font-semibold text-white shadow-glow hover:from-brand-600 hover:to-brand-800 transition-colors"
+                >
+                  Get started
+                </Link>
               </div>
             )}
 
@@ -113,13 +130,30 @@ export default function Navbar() {
                 {l.label}
               </Link>
             ))}
-            {user && (
+            {user ? (
               <button
                 onClick={handleSignOut}
                 className="mt-1 flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
               >
                 <FiLogOut size={16} /> Sign out
               </button>
+            ) : (
+              <>
+                <Link
+                  to="/sign-in"
+                  onClick={() => setOpen(false)}
+                  className="px-3 py-2.5 rounded-lg text-sm font-semibold text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
+                >
+                  Sign in
+                </Link>
+                <Link
+                  to="/sign-up"
+                  onClick={() => setOpen(false)}
+                  className="mt-1 px-3 py-2.5 rounded-lg text-sm font-semibold text-center text-white bg-gradient-to-br from-brand-500 to-brand-700"
+                >
+                  Get started
+                </Link>
+              </>
             )}
           </div>
         </div>

@@ -1,5 +1,5 @@
-import React from "react";
-import { Link } from "react-router-dom";
+import React, { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import {
   FiArrowRight,
   FiSearch,
@@ -8,10 +8,20 @@ import {
   FiMapPin,
   FiClock,
   FiHeart,
+  FiShoppingBag,
+  FiUsers,
 } from "react-icons/fi";
 import { useAuth } from "../../context/AuthContext";
+import { useToast } from "../../context/ToastContext";
 import Button from "../../components/ui/Button";
 import { foodImage } from "../../lib/foodImages";
+
+// Seeded read-only demo accounts so anyone with the link (recruiters, etc.)
+// can explore the full app in one click — no sign-up required.
+const DEMO = {
+  restaurant: { email: "demo.restaurant@foodlink.com", password: "Demo@1234" },
+  ngo: { email: "demo.ngo@foodlink.com", password: "Demo@1234" },
+};
 
 const steps = [
   {
@@ -38,9 +48,29 @@ const stats = [
 ];
 
 export default function HomePage() {
-  const { user } = useAuth();
+  const { user, login } = useAuth();
+  const navigate = useNavigate();
+  const toast = useToast();
+  const [demoLoading, setDemoLoading] = useState(null); // 'restaurant' | 'ngo' | null
+
   const type = user?.userType === "Restaurant" ? "restaurant" : "ngo";
   const firstName = (user?.username || "there").split(/\s+/)[0];
+
+  const enterDemo = async (role) => {
+    if (demoLoading) return;
+    setDemoLoading(role);
+    try {
+      const u = await login(DEMO[role]);
+      toast.success(`Exploring as ${role === "restaurant" ? "a Restaurant" : "an NGO"}`);
+      const dest = u?.userType === "Restaurant" ? "restaurant" : "ngo";
+      navigate(`/${dest}/listings`);
+    } catch (err) {
+      toast.error(
+        err.response?.data?.message || "Couldn't start the demo — the server may be waking up, try again."
+      );
+      setDemoLoading(null);
+    }
+  };
 
   return (
     <main className="bg-stone-50 dark:bg-stone-950">
@@ -53,7 +83,7 @@ export default function HomePage() {
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div className="animate-fade-in-up">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 dark:bg-brand-900/30 border border-brand-200/60 dark:border-brand-800 px-3 py-1 text-xs font-semibold text-brand-700 dark:text-brand-300">
-                <FiHeart size={12} /> Welcome back, {firstName}
+                <FiHeart size={12} /> {user ? `Welcome back, ${firstName}` : "Fighting food waste, in real time"}
               </span>
               <h1 className="mt-5 font-display text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-[1.05] tracking-tight text-stone-900 dark:text-white">
                 Share surplus.
@@ -66,18 +96,57 @@ export default function HomePage() {
                 FoodLink connects restaurants with extra food to nearby NGOs — turning what would be
                 waste into meals for the community.
               </p>
-              <div className="mt-8 flex flex-wrap gap-3">
-                <Link to={`/${type}/listings`}>
-                  <Button size="lg">
-                    Browse listings <FiArrowRight />
-                  </Button>
-                </Link>
-                <Link to={`/${type}/transactions`}>
-                  <Button size="lg" variant="secondary">
-                    My transactions
-                  </Button>
-                </Link>
-              </div>
+
+              {user ? (
+                <div className="mt-8 flex flex-wrap gap-3">
+                  <Link to={`/${type}/listings`}>
+                    <Button size="lg">
+                      Browse listings <FiArrowRight />
+                    </Button>
+                  </Link>
+                  <Link to={`/${type}/transactions`}>
+                    <Button size="lg" variant="secondary">
+                      My transactions
+                    </Button>
+                  </Link>
+                </div>
+              ) : (
+                <div className="mt-8">
+                  <p className="mb-3 text-sm font-semibold text-stone-500 dark:text-stone-400">
+                    Try the live demo — no sign-up needed:
+                  </p>
+                  <div className="flex flex-wrap gap-3">
+                    <Button
+                      size="lg"
+                      loading={demoLoading === "restaurant"}
+                      disabled={!!demoLoading}
+                      onClick={() => enterDemo("restaurant")}
+                    >
+                      <FiShoppingBag /> Explore as Restaurant
+                    </Button>
+                    <Button
+                      size="lg"
+                      variant="secondary"
+                      loading={demoLoading === "ngo"}
+                      disabled={!!demoLoading}
+                      onClick={() => enterDemo("ngo")}
+                    >
+                      <FiUsers /> Explore as NGO
+                    </Button>
+                  </div>
+                  <p className="mt-4 text-sm text-stone-500 dark:text-stone-400">
+                    Have an account?{" "}
+                    <Link to="/sign-in" className="font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                      Sign in
+                    </Link>{" "}
+                    or{" "}
+                    <Link to="/sign-up" className="font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                      create one
+                    </Link>
+                    .
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Image collage */}

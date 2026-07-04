@@ -1,11 +1,16 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { FiEye, FiEyeOff, FiHeart } from 'react-icons/fi';
+import { FiEye, FiEyeOff, FiHeart, FiShoppingBag, FiUsers } from 'react-icons/fi';
 import { useAuth } from '../../../context/AuthContext';
 import { useToast } from '../../../context/ToastContext';
 import Button from '../../../components/ui/Button';
 import { Input, Label } from '../../../components/ui/Input';
 import AuthBrandPanel from '../AuthBrandPanel';
+
+const DEMO = {
+  restaurant: { email: 'demo.restaurant@foodlink.com', password: 'Demo@1234' },
+  ngo: { email: 'demo.ngo@foodlink.com', password: 'Demo@1234' },
+};
 
 const SignInPage = () => {
   const { login } = useAuth();
@@ -15,7 +20,25 @@ const SignInPage = () => {
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [demoLoading, setDemoLoading] = useState(null); // 'restaurant' | 'ngo' | null
   const [formData, setFormData] = useState({ email: '', password: '' });
+
+  const enterDemo = async (role) => {
+    if (demoLoading || submitting) return;
+    setError('');
+    setDemoLoading(role);
+    try {
+      const u = await login(DEMO[role]);
+      toast.success(`Exploring as ${role === 'restaurant' ? 'a Restaurant' : 'an NGO'}`);
+      const dest = u?.userType === 'Restaurant' ? 'restaurant' : 'ngo';
+      navigate(`/${dest}/listings`);
+    } catch (err) {
+      const msg = err.response?.data?.message || "Couldn't start the demo — the server may be waking up, try again.";
+      setError(msg);
+      toast.error(msg);
+      setDemoLoading(null);
+    }
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -95,10 +118,35 @@ const SignInPage = () => {
 
             {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
-            <Button type="submit" size="lg" loading={submitting} className="w-full">
+            <Button type="submit" size="lg" loading={submitting} disabled={!!demoLoading} className="w-full">
               Sign in
             </Button>
           </form>
+
+          <div className="my-6 flex items-center gap-3">
+            <div className="h-px flex-1 bg-stone-200 dark:bg-stone-800" />
+            <span className="text-xs font-semibold uppercase tracking-wide text-stone-400">or try a demo</span>
+            <div className="h-px flex-1 bg-stone-200 dark:bg-stone-800" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Button
+              variant="secondary"
+              loading={demoLoading === 'restaurant'}
+              disabled={submitting || !!demoLoading}
+              onClick={() => enterDemo('restaurant')}
+            >
+              <FiShoppingBag /> Restaurant
+            </Button>
+            <Button
+              variant="secondary"
+              loading={demoLoading === 'ngo'}
+              disabled={submitting || !!demoLoading}
+              onClick={() => enterDemo('ngo')}
+            >
+              <FiUsers /> NGO
+            </Button>
+          </div>
 
           <p className="mt-6 text-sm text-stone-500 dark:text-stone-400">
             Don&apos;t have an account?{' '}
